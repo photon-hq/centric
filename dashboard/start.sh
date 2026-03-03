@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# TaxPro Dashboard Start Script
+# Photon Dashboard Start Script
 
-echo "🌐 TaxPro Support Agent Dashboard"
+echo "🌐 Photon Customer Support Dashboard"
 echo "=================================="
 echo ""
 

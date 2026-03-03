@@ -1,5 +1,5 @@
 {
-  "name": "taxpro-dashboard",
+  "name": "photon-dashboard",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
+    "lucide-react": "^0.576.0",
     "next": "^15.1.6",
     "openai": "^4.77.0",
     "react": "^19.0.0",

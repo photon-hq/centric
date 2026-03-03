@@ -104,7 +104,7 @@ function extractTextContent(html: string, url: string): string {
 async function scrapeWebsite(
   config: ScrapeConfig,
   encoder: TextEncoder,
-  writer: WritableStreamDefaultWriter<Uint8Array>
+  controller: ReadableStreamDefaultController<Uint8Array>
 ) {
   const visited = new Set<string>()
   const queue: Array<{ url: string; depth: number }> = [{ url: config.websiteUrl, depth: 0 }]
@@ -115,7 +115,7 @@ async function scrapeWebsite(
 
   // Send progress update helper
   const sendProgress = async (data: any) => {
-    await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
   }
 
   while (queue.length > 0) {
@@ -230,12 +230,10 @@ export async function POST(request: NextRequest) {
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
-      const writer = controller
-
       try {
-        await scrapeWebsite(config, encoder, writer as any)
+        await scrapeWebsite(config, encoder, controller)
       } catch (error) {
-        await writer.enqueue(
+        controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({
               type: 'error',

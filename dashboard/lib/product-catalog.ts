@@ -253,7 +253,7 @@ ${product.features.map(f => `  • ${f}`).join('\n')}
             basic: products.filter(p => p.price < 200)
         }
         
-        let summary = '🛍️  TaxPro Services Catalog\n\n'
+        let summary = '🛍️  Photon Services Catalog\n\n'
         
         if (categories.premium.length > 0) {
             summary += '💎 Premium Services:\n'

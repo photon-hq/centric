@@ -1,103 +1,201 @@
 # 🚀 Quick Start Guide
 
-This project includes **TWO ways** to test the TaxPro AI Support Agent:
-
-## 1️⃣ Web Dashboard (Recommended for Testing)
-
-The easiest way to test the agent - no iMessage setup needed!
-
-### Setup (2 minutes)
-
-```bash
-# Navigate to dashboard
-cd dashboard
-
-# Create environment file
-cp .env.example .env.local
-
-# Add your OpenAI API key to .env.local
-# OPENAI_API_KEY=sk-your-actual-key-here
-
-# Start the dashboard
-./start.sh
-# Or: bun dev
-```
-
-### Access
-
-Open your browser to: **http://localhost:3000**
-
-### What You'll See
-
-- 🎨 Beautiful chat interface
-- 📚 Quick test prompts
-- 💬 Real-time AI responses
-- 🛍️ Product catalog info
-- 💰 Price negotiation demo
-
-**Perfect for:**
-- Development and testing
-- Demo presentations
-- Rapid iteration on prompts
-- No phone number required
+Get your AI customer support agent running in 3 simple steps!
 
 ---
 
-## 2️⃣ iMessage Agent (Production)
+## Step 1: Get Your OpenAI API Key
 
-Use the agent through Apple Messages for real customer support.
-
-### Setup (5 minutes)
-
-```bash
-# In main directory (not dashboard)
-cd /Users/world/Desktop/Projects/PhotonCustomerSupport
-
-# Create environment file
-cp .env.example .env
-
-# Add your OpenAI API key to .env
-# OPENAI_API_KEY=sk-your-actual-key-here
-
-# Grant Full Disk Access
-# System Settings → Privacy & Security → Full Disk Access
-# Add your Terminal or IDE
-
-# Start the agent
-./start.sh
-# Or: bun run start
-```
-
-### How to Use
-
-1. Send iMessage to your Mac's phone number
-2. Agent automatically responds
-3. Handles multiple conversations simultaneously
-
-**Perfect for:**
-- Production customer support
-- Real customer interactions
-- Multi-customer handling
-- Native iMessage experience
+1. Go to [OpenAI Platform](https://platform.openai.com/api-keys)
+2. Sign in or create an account
+3. Click "Create new secret key"
+4. Copy the key (starts with `sk-`)
 
 ---
 
-## 📊 Feature Comparison
+## Step 2: Run the Startup Script
 
-| Feature | Web Dashboard | iMessage Agent |
-|---------|---------------|----------------|
-| **Setup Time** | 2 minutes | 5 minutes |
-| **Requirements** | Browser only | macOS + Full Disk Access |
-| **Testing** | Instant | Need phone/iMessage |
-| **Interface** | Modern web UI | Native Messages |
-| **Use Case** | Development | Production |
-| **Multi-user** | Single session | Multiple customers |
+```bash
+# Make sure you're in the project directory
+cd PhotonCustomerSupport
+
+# Start the agent system
+./start.sh
+```
+
+**What happens:**
+- ✅ Checks for API key (creates `.env.local` if needed)
+- 🔧 Detects if setup is complete
+- 🌐 Launches the interactive dashboard
+- 🚀 Opens browser automatically
+
+---
+
+## Step 3: Complete Setup (First Time Only)
+
+### If This Is Your First Run:
+
+The dashboard will open to the **Setup Wizard** at `http://localhost:3000/config`
+
+**Follow these steps:**
+
+1. **Enter your website URL** (e.g., `https://yourcompany.com`)
+   
+2. **Configure scraper options:**
+   - ✅ Include subdomains (optional)
+   - 🔢 Max depth: 2-5 levels
+
+3. **Click "Start Scraping"**
+   - Watch progress in real-time
+   - Wait for completion (usually 1-5 minutes)
+
+4. **Test in the chat interface**
+   - Click the home icon or go to `http://localhost:3000`
+   - Try asking questions about your business
+   - Verify the AI knows your content
+
+5. **Deploy to iMessage** (optional)
+   - Click "Launch iMessage Agent" button
+   - Now it responds to iMessages automatically!
+
+### If Setup Is Already Complete:
+
+The dashboard opens at `http://localhost:3000` ready to use:
+- 💬 **Test with chat** - Try questions immediately
+- 📱 **Launch iMessage** - One-click deployment
+- ⚙️ **Update config** - Modify settings anytime
+
+---
+
+## 🎨 Dashboard Features
+
+### Main Page (`/`)
+- **Chat Interface**: Test your agent instantly
+- **iMessage Control**: Start/stop button with live status
+- **Quick Prompts**: Example questions to try
+- **Status Indicators**: See document count and setup status
+
+### Config Page (`/config`)
+- **Website Scraper**: Automatic knowledge base builder
+- **Real-time Progress**: Watch as pages are scraped
+- **Configuration**: Website URL, subdomain options, depth
+- **Document Upload**: Upload text files, images, or PDFs (AI extracts text automatically)
+- **Document Management**: Clear scraped content if needed
+
+---
+
+## 🔧 Common Tasks
+
+### Update Your Knowledge Base
+```bash
+./start.sh
+# Then visit http://localhost:3000/config
+# Re-scrape your website to get latest content
+```
+
+### Test Chat Responses
+```bash
+./start.sh
+# Chat interface is on the main page
+```
+
+### Deploy to iMessage
+```bash
+./start.sh
+# Click "Launch iMessage Agent" button
+# Agent runs in background responding to messages
+```
+
+### Stop iMessage Agent
+```bash
+# Click "Stop iMessage Agent" button in dashboard
+# Or press Ctrl+C in terminal if running agent directly
+```
+
+---
+
+## 📱 iMessage Setup (macOS only)
+
+To receive real iMessages:
+
+1. **Enable iMessage on Mac:**
+   - Open Messages app
+   - Sign in with Apple ID
+   - Ensure iMessage is active
+
+2. **Grant Full Disk Access:**
+   - System Settings → Privacy & Security
+   - Full Disk Access → Add your Terminal or IDE
+   - Restart Terminal/IDE
+
+3. **Launch Agent:**
+   - Use dashboard button to start
+   - Or run `bun run tax-support-agent.ts` directly
+
+4. **Test:**
+   - Send iMessage to your Mac's number
+   - Agent responds automatically
 
 ---
 
 ## 🎯 Recommended Workflow
 
-### For Development:
+### Development & Testing:
+1. Start with `./start.sh`
+2. Use web chat interface
+3. Iterate on configuration
+4. Test thoroughly
+
+### Production Deployment:
+1. Verify chat responses are good
+2. Click "Launch iMessage Agent"
+3. Monitor dashboard for status
+4. Agent handles real customers
+
+---
+
+## 💡 Tips
+
+- **First time?** Complete setup wizard before testing
+- **Testing?** Use web chat - it's faster than iMessage
+- **Going live?** Launch iMessage from dashboard button
+- **Need changes?** Update config anytime and re-scrape
+- **Multiple sites?** Scrape subdomains for complete coverage
+
+---
+
+## 🆘 Troubleshooting
+
+### "API Key Not Found"
+- Edit `.env.local` and add: `OPENAI_API_KEY=sk-...`
+- Get key from https://platform.openai.com/api-keys
+
+### "No Documents Found"
+- Go to `/config` and scrape your website
+- Or manually add `.md` files to `documents/` folder
+
+### "iMessage Won't Start"
+- Check Full Disk Access is granted
+- Restart Terminal/IDE after granting access
+- Ensure Messages app is signed in
+
+### "Agent Not Responding"
+- Check iMessage status in dashboard
+- Verify agent process is running
+- Check terminal output for errors
+
+---
+
+## 📚 Next Steps
+
+- ✅ **Completed setup?** Try the [examples](./EXAMPLES.md)
+- 🔧 **Want to customize?** Read the [full README](./README.md)
+- 🏢 **Different industry?** Check [config examples](./config/examples/)
+- 📖 **Technical details?** See [architecture docs](./docs/)
+
+---
+
+**Need help?** Open an issue or check the documentation!
 1. **Test in Dashboard** → Fast iteration, instant feedback
 2. **Refine logic** → Adjust prompts, products, negotiation
 3. **Deploy to iMessage** → Use for real customers

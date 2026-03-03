@@ -2,6 +2,17 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { COMPANY_CONFIG } from '@/config/company'
+import { 
+  ShoppingBag, 
+  DollarSign, 
+  Rocket, 
+  Gift, 
+  Send, 
+  RotateCcw,
+  Bot
+} from 'lucide-react'
+
+import PhotonLogo from './PhotonLogo'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -10,13 +21,7 @@ interface Message {
 }
 
 export default function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: COMPANY_CONFIG.greeting,
-      timestamp: new Date()
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -82,17 +87,20 @@ export default function ChatInterface() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden flex flex-col h-[600px]">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col h-[600px] shadow-sm">
       {/* Chat Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4">
+      <div className="bg-white border-b border-gray-100 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-2xl">
-              🤖
+            <div className="w-8 h-8 bg-black text-white rounded-lg flex items-center justify-center p-1.5">
+              <PhotonLogo />
             </div>
             <div>
-              <h2 className="font-semibold">{COMPANY_CONFIG.name} AI Assistant</h2>
-              <p className="text-sm text-blue-100">Online • Powered by GPT-4</p>
+              <h2 className="font-semibold text-sm">{COMPANY_CONFIG.name} Assistant</h2>
+              <p className="text-xs text-green-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                Online
+              </p>
             </div>
           </div>
           <button
@@ -101,43 +109,44 @@ export default function ChatInterface() {
               content: COMPANY_CONFIG.greeting,
               timestamp: new Date()
             }])}
-            className="text-sm bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition"
+            className="text-xs text-gray-400 hover:text-black transition-colors flex items-center gap-1"
           >
+            <RotateCcw className="w-3 h-3" />
             Clear Chat
           </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50">
         {messages.map((message, index) => (
           <div
             key={index}
             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] rounded-lg p-3 ${
+              className={`max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${
                 message.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                  ? 'bg-black text-white rounded-br-none'
+                  : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
               }`}
             >
               <p className="whitespace-pre-wrap">{message.content}</p>
-              <p className={`text-xs mt-1 ${
-                message.role === 'user' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
+              <p className={`text-[10px] mt-2 opacity-50 ${
+                message.role === 'user' ? 'text-gray-300' : 'text-gray-400'
               }`}>
-                {message.timestamp.toLocaleTimeString()}
+                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
           </div>
         ))}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-3">
-              <div className="flex space-x-2">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+            <div className="bg-white border border-gray-100 rounded-2xl rounded-bl-none px-5 py-4 shadow-sm">
+              <div className="flex space-x-1.5">
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
               </div>
             </div>
           </div>
@@ -146,52 +155,44 @@ export default function ChatInterface() {
       </div>
 
       {/* Quick Actions */}
-      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          <button
-            onClick={() => handleQuickPrompt('What documents do I need to file my taxes?')}
-            className="text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full px-3 py-1 hover:bg-gray-50 dark:hover:bg-gray-700 whitespace-nowrap"
-          >
-            📄 Documents needed
-          </button>
-          <button
-            onClick={() => handleQuickPrompt('How much does individual tax filing cost?')}
-            className="text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full px-3 py-1 hover:bg-gray-50 dark:hover:bg-gray-700 whitespace-nowrap"
-          >
-            💰 Pricing
-          </button>
-          <button
-            onClick={() => handleQuickPrompt('When is the tax deadline?')}
-            className="text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full px-3 py-1 hover:bg-gray-50 dark:hover:bg-gray-700 whitespace-nowrap"
-          >
-            📅 Deadlines
-          </button>
-          <button
-            onClick={() => handleQuickPrompt('Do you help with business taxes?')}
-            className="text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full px-3 py-1 hover:bg-gray-50 dark:hover:bg-gray-700 whitespace-nowrap"
-          >
-            🏢 Business taxes
-          </button>
+      <div className="px-4 py-3 bg-white border-t border-gray-100">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+          {[
+            { label: "Services", icon: <ShoppingBag className="w-3 h-3" />, prompt: "What services do you offer?" },
+            { label: "Pricing", icon: <DollarSign className="w-3 h-3" />, prompt: "How much does your service cost?" },
+            { label: "Get Started", icon: <Rocket className="w-3 h-3" />, prompt: "Can you help me get started?" },
+            { label: "Offers", icon: <Gift className="w-3 h-3" />, prompt: "Do you have any special offers?" }
+          ].map((action, i) => (
+            <button
+              key={i}
+              onClick={() => handleQuickPrompt(action.prompt)}
+              className="text-xs bg-gray-50 border border-gray-200 text-gray-600 rounded-full px-3 py-1.5 hover:bg-gray-100 hover:border-gray-300 transition-colors whitespace-nowrap flex items-center gap-1.5"
+            >
+              {action.icon}
+              {action.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex space-x-2">
+      <form onSubmit={handleSubmit} className="p-4 bg-white border-t border-gray-100">
+        <div className="flex space-x-2 relative">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message..."
             disabled={isLoading}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+            className="flex-1 pl-4 pr-12 py-3 bg-gray-50 border-none rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-gray-200 placeholder-gray-400 text-gray-800 disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="absolute right-2 top-1.5 bottom-1.5 bg-black text-white rounded-lg px-3 text-xs font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
           >
-            Send
+            <span>Send</span>
+            <Send className="w-3 h-3" />
           </button>
         </div>
       </form>

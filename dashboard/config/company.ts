@@ -2,6 +2,7 @@
  * Company Configuration
  * 
  * Customize this file to adapt the agent for your specific company
+ * Uses environment variables if available, falling back to defaults
  */
 
 export interface CompanyConfig {
@@ -19,21 +20,21 @@ export interface CompanyConfig {
  * Current company configuration - Edit this to change the agent's company
  */
 export const COMPANY_CONFIG: CompanyConfig = {
-  name: 'TaxPro Tax Services',
-  industry: 'Tax Preparation and Planning',
-  description: 'Professional tax services for individuals and businesses',
-  website: 'taxpro.com',
-  phone: '1-800-TAXPRO (829-7776)',
-  email: 'support@taxpro.com',
+  name: process.env.NEXT_PUBLIC_COMPANY_NAME || 'Photon',
+  industry: process.env.NEXT_PUBLIC_COMPANY_INDUSTRY || 'Customer Support AI',
+  description: process.env.NEXT_PUBLIC_COMPANY_DESCRIPTION || 'AI-powered customer support for modern businesses',
+  website: process.env.NEXT_PUBLIC_COMPANY_WEBSITE || 'photon.com',
+  phone: process.env.NEXT_PUBLIC_COMPANY_PHONE || '1-800-PHOTON',
+  email: process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'support@photon.com',
   features: [
-    'Tax filing for individuals and businesses',
-    'Tax planning consultation',
-    'IRS audit defense and representation',
-    'Prior year returns and amendments',
-    'State tax returns',
-    'Extension filing'
+    'Instant customer support',
+    'Product recommendations',
+    'Order tracking',
+    'Account management',
+    'Technical troubleshooting',
+    'Integration assistance'
   ],
-  greeting: 'Hello! I\'m the TaxPro AI Assistant. I can help you with tax questions, explain our services, and assist with purchases. How can I help you today?'
+  greeting: process.env.NEXT_PUBLIC_COMPANY_GREETING || 'Hello! I\'m the Photon AI Assistant. I can help you with product questions, support issues, and more. How can I help you today?'
 }
 
 /**

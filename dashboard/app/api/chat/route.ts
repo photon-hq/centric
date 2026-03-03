@@ -248,10 +248,10 @@ ${productCatalog.getProductDescription(product.id)}`
   ]
   
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: process.env.MODEL || 'gpt-5-mini',
     messages,
-    temperature: 0.7,
-    max_tokens: 1000
+    temperature: parseFloat(process.env.TEMPERATURE || '0.7'),
+    max_completion_tokens: parseInt(process.env.MAX_COMPLETION_TOKENS || '5000')
   })
   
   const assistantMessage = completion.choices[0].message.content || 

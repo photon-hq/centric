@@ -2,30 +2,72 @@
 
 An intelligent, **configurable** iMessage-based customer support agent powered by AI with document-based knowledge retrieval (RAG), product sales capabilities, and price negotiation. 
 
-**Industry-Agnostic**: Easily adapt this agent for any business - tax services, e-commerce, SaaS, healthcare, and more. Simply edit the configuration files to match your company and products.
+**Industry-Agnostic**: Easily adapt this agent for any business - e-commerce, SaaS, healthcare, consulting, and more. Simply edit the configuration files to match your company and products.
 
-**Current Configuration**: TaxPro Tax Services (see `config/examples/` for other industries)
+**Current Configuration**: Customizable demo setup (see `config/examples/` for industry templates)
 
-## 🌐 Web Dashboard Available!
+---
 
-Want to test the agent in your browser instead of iMessage? Check out the **[Next.js Dashboard](./dashboard/README.md)**:
-- Beautiful web chat interface
-- No iMessage setup required
-- Perfect for development and testing
-- Same AI capabilities (RAG, products, negotiation)
-- **NEW: Automatic Website Scraper** - Build your knowledge base by scraping your website!
+## ⚡ Quick Start (3 Steps)
+
+Get your AI support agent running in minutes:
 
 ```bash
-cd dashboard
-cp .env.example .env.local  # Add your OpenAI API key
-./start.sh  # Open http://localhost:3000
+# 1. Get the code
+git clone <repository>
+cd PhotonCustomerSupport
+
+# 2. Start the setup
+./start.sh
 ```
+
+That's it! The script will:
+- ✅ Help you set up your OpenAI API key
+- 🔧 Guide you through the setup wizard
+- 🌐 Launch an interactive dashboard
+- 📱 Let you deploy to iMessage with one click
+
+### What Happens Next?
+
+**First Run (Setup Mode)**:
+1. The dashboard opens to the setup wizard at `http://localhost:3000/config`
+2. Enter your website URL to automatically scrape and build your knowledge base
+3. Test the agent with the chat interface
+4. Click "Launch iMessage Agent" when ready to go live
+
+**Subsequent Runs**:
+- Dashboard opens at `http://localhost:3000` 
+- Chat interface ready for testing
+- One-click iMessage deployment
+
+---
+
+## 🌐 Interactive Dashboard
+
+The dashboard provides everything you need in one place:
+
+### Features
+- **💬 Live Chat Testing**: Test your agent before deploying
+- **🔧 Setup Wizard**: Scrape your website to build knowledge base automatically
+- **📱 iMessage Control**: Start/stop iMessage integration with one click
+- **📊 Status Monitoring**: See agent uptime and status in real-time
+- **⚙️ Configuration**: Update settings anytime
+
+### Setup Wizard
+
+The automatic website scraper:
+- 🔍 Crawls your entire website automatically
+- 🌐 Optionally includes same-origin subdomains (e.g., `docs.example.com`)
+- 📄 Extracts clean text content from every page
+- 💾 Saves everything to your `documents/` folder
+- ⚡ Shows real-time progress
+- 🤖 AI automatically uses the scraped content
+
+---
 
 ## 🚀 Automatic Knowledge Base Scraper
 
-**NEW FEATURE**: Automatically build your knowledge base by scraping your website!
-
-The dashboard includes a powerful web scraper that:
+Build your knowledge base by scraping your website!
 - 🔍 Crawls your entire website automatically
 - 🌐 Optionally includes same-origin subdomains (e.g., `docs.example.com`, `platform.example.com`)
 - 📄 Extracts clean text content from every page

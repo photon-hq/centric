@@ -33,7 +33,7 @@ export const COMPANY_CONFIG: CompanyConfig = {
     'State tax returns',
     'Extension filing'
   ],
-  greeting: 'Hello! I\'m the TaxPro AI Assistant. I can help you with tax questions, explain our services, and assist with purchases. How can I help you today?'
+  greeting: 'Hello! I\'m your AI Assistant. I can help you with questions, explain our services, and assist with purchases. How can I help you today?'
 }
 
 /**

@@ -1,4 +1,4 @@
-# TaxPro Support Agent Dashboard 🌐
+# Photon Customer Support Dashboard 🌐
 
 A Next.js web dashboard for testing the AI customer support agent in your browser. This provides the same intelligent features as the iMessage agent (RAG, product catalog, negotiation) but through a clean web interface.
 
@@ -361,4 +361,4 @@ bun lint         # Run ESLint
 
 ---
 
-**Built with ❤️ for TaxPro** | Powered by OpenAI & Next.js
+**Built with ❤️ by Anmol** | Powered by OpenAI & Next.js

@@ -32,9 +32,9 @@ interface AgentConfig {
 // Initialize OpenAI
 const config: AgentConfig = {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
-    model: 'gpt-5-mini',
-    temperature: 0.7,
-    max_completion_tokens: 1000,
+    model: process.env.MODEL || 'gpt-5-mini',
+    temperature: parseFloat(process.env.TEMPERATURE || '0.7'),
+    max_completion_tokens: parseInt(process.env.MAX_COMPLETION_TOKENS || '5000'),
     debug: true
 }
 
@@ -251,7 +251,7 @@ ${productCatalog.getProductDescription(product.id)}`
         model: config.model!,
         messages,
         temperature: config.temperature,
-        max_tokens: config.max_completion_tokens
+        max_completion_tokens: config.max_completion_tokens
     })
     
     const assistantMessage = completion.choices[0].message.content || 
