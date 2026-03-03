@@ -206,52 +206,73 @@ async function scrapeWebsite(
 }
 
 export async function POST(request: NextRequest) {
-  const config: ScrapeConfig = await request.json()
-
-  // Validate config
-  if (!config.websiteUrl) {
-    return new Response(
-      JSON.stringify({ error: 'Website URL is required' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } }
-    )
-  }
-
-  // Validate URL format
   try {
-    new URL(config.websiteUrl)
-  } catch {
+    const config: ScrapeConfig = await request.json()
+    console.log('Received scrape config:', config)
+
+    // Validate config
+    if (!config.websiteUrl) {
+      console.error('Missing websiteUrl in config:', config)
+      return new Response(
+        JSON.stringify({ error: 'Website URL is required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Normalize URL - add https:// if no protocol specified
+    let normalizedUrl = config.websiteUrl.trim()
+    if (!normalizedUrl.match(/^https?:\/\//i)) {
+      normalizedUrl = `https://${normalizedUrl}`
+    }
+
+    // Validate URL format
+    try {
+      new URL(normalizedUrl)
+      config.websiteUrl = normalizedUrl // Update config with normalized URL
+    } catch (error) {
+      console.error('Invalid URL format:', normalizedUrl, error)
+      return new Response(
+        JSON.stringify({ error: `Invalid URL format: ${normalizedUrl}` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Create a ReadableStream for Server-Sent Events
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          await scrapeWebsite(config, encoder, controller)
+        } catch (error) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'error',
+                message: error instanceof Error ? error.message : 'Unknown error occurred'
+              })}\n\n`
+            )
+          )
+        } finally {
+          controller.close()
+        }
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      }
+    })
+  } catch (error) {
+    console.error('Error in scrape endpoint:', error)
     return new Response(
-      JSON.stringify({ error: 'Invalid URL format' }),
+      JSON.stringify({ 
+        error: 'Failed to process request',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }),
       { status: 400, headers: { 'Content-Type': 'application/json' } }
     )
   }
-
-  // Create a ReadableStream for Server-Sent Events
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        await scrapeWebsite(config, encoder, controller)
-      } catch (error) {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              type: 'error',
-              message: error instanceof Error ? error.message : 'Unknown error occurred'
-            })}\n\n`
-          )
-        )
-      } finally {
-        controller.close()
-      }
-    }
-  })
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    }
-  })
 }

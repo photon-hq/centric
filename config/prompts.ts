@@ -5,11 +5,78 @@
  */
 
 import { CompanyConfig } from './company'
+import * as fs from 'fs'
+import * as path from 'path'
+
+interface SOP {
+  id: string
+  title: string
+  objective: string
+  trigger: string
+  steps: string[]
+  enabled: boolean
+}
+
+/**
+ * Load SOPs from config file
+ */
+export function loadSOPs(): SOP[] {
+  const configDir = path.join(process.cwd(), 'config')
+  const dashboardConfigDir = path.join(process.cwd(), '..', 'config')
+  
+  // Try loading from different paths depending on where we're running from
+  const paths = [
+    path.join(configDir, 'sops.json'),
+    path.join(dashboardConfigDir, 'sops.json'),
+    path.join(configDir, 'default-sops.json'),
+    path.join(dashboardConfigDir, 'default-sops.json')
+  ]
+  
+  for (const sopPath of paths) {
+    if (fs.existsSync(sopPath)) {
+      try {
+        const data = fs.readFileSync(sopPath, 'utf-8')
+        const sops = JSON.parse(data) as SOP[]
+        return sops.filter(sop => sop.enabled)
+      } catch (e) {
+        console.error('Error loading SOPs from', sopPath, e)
+      }
+    }
+  }
+  
+  return []
+}
+
+/**
+ * Format SOPs for inclusion in system prompt
+ */
+export function formatSOPsForPrompt(sops: SOP[]): string {
+  if (sops.length === 0) return ''
+  
+  let sopText = '\n\nSTANDARD OPERATING PROCEDURES (SOPs):\nFollow these procedures when handling specific customer situations:\n\n'
+  
+  sops.forEach((sop, index) => {
+    sopText += `### SOP ${index + 1}: ${sop.title}\n`
+    sopText += `**Objective:** ${sop.objective}\n`
+    sopText += `**Trigger:** ${sop.trigger}\n`
+    sopText += `**Steps:**\n`
+    sop.steps.forEach((step, stepIndex) => {
+      sopText += `  ${stepIndex + 1}. ${step}\n`
+    })
+    sopText += '\n'
+  })
+  
+  return sopText
+}
 
 /**
  * Generate the system prompt based on company configuration
  */
 export function generateSystemPrompt(company: CompanyConfig): string {
+  // Load enabled SOPs
+  const sops = loadSOPs()
+  const sopSection = formatSOPsForPrompt(sops)
+  
   return `You are ${company.name} AI Assistant, a helpful and professional customer support agent for ${company.name}.
 
 COMPANY INFORMATION:
@@ -71,6 +138,7 @@ IMPORTANT RULES:
 - Never share other customers' information or violate privacy
 - Be respectful and professional at all times
 - If a customer is frustrated or angry, stay calm and empathetic
+- **CRITICAL: You are NOT authorized to create, modify, or agree to any legally binding terms, contracts, agreements, or commitments on behalf of ${company.name}. For any legal matters, terms of service, contracts, or binding agreements, customers must speak with an authorized representative.**
 
 ESCALATION TO HUMAN:
 Consider escalating to a human agent when:
@@ -87,7 +155,7 @@ RESPONSE FORMAT:
 - Use bullet points or numbered lists for clarity
 - End with a clear call-to-action or question when appropriate
 - Be conversational but professional
-
+${sopSection}
 Remember: Your goal is to provide excellent customer service, build trust, and help customers succeed with ${company.name} products and services.`
 }
 

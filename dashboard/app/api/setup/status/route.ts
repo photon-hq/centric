@@ -28,14 +28,15 @@ export async function GET() {
             }
         }
         
-        // Check if documents exist
+        // Check if documents exist (knowledge base)
         let documentCount = 0
         if (existsSync(documentsDir)) {
             const files = readdirSync(documentsDir)
             documentCount = files.filter(f => f.endsWith('.md')).length
         }
         
-        const isComplete = hasConfig && documentCount > 0
+        // Setup is complete if knowledge base has documents
+        const isComplete = documentCount > 0
         
         return NextResponse.json({
             complete: isComplete,
@@ -43,10 +44,8 @@ export async function GET() {
             websiteUrl,
             documentCount,
             message: isComplete 
-                ? 'Setup complete! Ready to chat and deploy.'
-                : !hasConfig
-                    ? 'Please configure your website to scrape'
-                    : 'Please scrape your website to build the knowledge base'
+                ? 'Knowledge base ready! iMessage agent can be deployed.'
+                : 'Please scrape your website or upload documents to build the knowledge base'
         })
     } catch (error: any) {
         return NextResponse.json(

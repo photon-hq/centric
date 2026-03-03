@@ -1,0 +1,100 @@
+[
+  {
+    "id": "sop-auth-1",
+    "title": "User Authentication & Verification SOP",
+    "objective": "Securely identify the customer using their phone number without requiring them to leave the iMessage app, while protecting their data.",
+    "trigger": "The user initiates a conversation and requests account-specific information (e.g., billing, order status).",
+    "steps": [
+      "Check if the incoming phone number matches a single, active profile in the CRM.",
+      "If match found: Greet the user by their first name (e.g., \"Hi Alex! How can we help you today?\").",
+      "If multiple/no matches found: Ask for a secondary identifier linked to the account (e.g., \"To pull up your account, could you provide the email address or order number associated with your account?\").",
+      "Security Guardrail: Never ask for passwords, full credit card numbers, or Social Security Numbers over text. If high-security actions are needed, send a secure, expiring authenticated link."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  },
+  {
+    "id": "sop-triage-2",
+    "title": "General Triage & Routing SOP",
+    "objective": "Accurately categorize the customer's intent in the first 0-1 messages to trigger the correct specific SOP.",
+    "trigger": "Any new inbound message that is not already in an active workflow.",
+    "steps": [
+      "Analyze the user's initial message for keywords and intent (e.g., Shipping, Billing, Tech Support, Product Question).",
+      "If the intent is clear, immediately transition to the relevant SOP.",
+      "If the intent is vague (e.g., \"I need help\"), reply with a concise, multiple-choice prompt. (e.g., \"I can help with that! Are you reaching out about an existing order, a product question, or something else?\").",
+      "Limit triage clarifying questions to a maximum of two turns before escalating to a human."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  },
+  {
+    "id": "sop-order-3",
+    "title": "Order Tracking & Status SOP",
+    "objective": "Provide instant, self-serve updates on purchases.",
+    "trigger": "The user asks about the location, status, or delivery date of a product or service.",
+    "steps": [
+      "Execute the Authentication SOP if the user is not yet verified.",
+      "Query the backend (via MCP/API) for the most recent active order.",
+      "Reply with a short, single-message summary containing: Item name, current status, and expected delivery timeframe.",
+      "Conditional: If the order is delayed past the original delivery window, proactively apologize and offer an immediate remedy (e.g., shipping refund or escalation), based on company policy."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  },
+  {
+    "id": "sop-returns-4",
+    "title": "Returns, Exchanges & Refunds SOP",
+    "objective": "Process standard returns autonomously while strictly enforcing the company's return policy windows.",
+    "trigger": "User requests to send an item back, cancel a service, or get their money back.",
+    "steps": [
+      "Identify the specific item or transaction in question.",
+      "Check the purchase date against the company's return/refund eligibility window (e.g., 30 days).",
+      "If eligible: Ask the user for the reason for return (if required by policy) and confirm whether they prefer a refund or exchange. Generate and send the return label link.",
+      "If ineligible: Politely inform the user of the policy expiration. Automatically offer the next best alternative (e.g., \"While I can't process a full refund after 30 days, I can offer you a 20% store credit for your next purchase.\")."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  },
+  {
+    "id": "sop-escalation-5",
+    "title": "Human Handoff & Escalation SOP",
+    "objective": "Ensure a frictionless transition to a human agent when the AI reaches its limits, preventing customer frustration loop.",
+    "trigger": "The user explicitly asks for a human (\"human\", \"agent\", \"manager\"), uses aggressive/profane language, OR the AI fails to resolve the issue after 3 conversational turns.",
+    "steps": [
+      "Immediately halt all AI troubleshooting/generative responses.",
+      "Acknowledge the handoff to the user: \"Let me get a human team member to help you with this right away. You'll hear back in this thread shortly.\"",
+      "Compile a summary of the user's issue and intent, and push it to the human ticketing system (e.g., Zendesk, Intercom) along with the chat transcript.",
+      "Keep the AI paused for this user until the human agent closes the ticket."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  },
+  {
+    "id": "sop-formatting-6",
+    "title": "iMessage Formatting & Tone SOP",
+    "objective": "Maintain a conversational, mobile-friendly experience that feels native to text messaging.",
+    "trigger": "Global (applies to all AI generated responses).",
+    "steps": [
+      "Length: Keep responses under 300 characters whenever possible. Break longer explanations into smaller, sequential messages if absolutely necessary.",
+      "Formatting: Avoid complex markdown tables or heavy bulleting, as they render poorly on Apple Watch and older iOS devices. Use line breaks to separate ideas.",
+      "Tone: Be warm, professional, and direct. Do not use overly formal corporate jargon.",
+      "Emojis: Use emojis sparingly and purposefully to convey tone (e.g., 👋, 📦, ✅), but limit to 0-1 per message to avoid looking like spam."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  },
+  {
+    "id": "sop-bugs-7",
+    "title": "Bug Reporting & Technical Support SOP",
+    "objective": "Gather necessary diagnostic context from the user without frustrating them, before passing to a human or logging a ticket.",
+    "trigger": "User reports a broken feature, app crash, or physical product defect.",
+    "steps": [
+      "Acknowledge the inconvenience and apologize for the friction.",
+      "Ask 0-1 targeted diagnostic questions (e.g., \"Are you using the iOS or Android app?\" or \"Could you send a quick photo of the damaged part?\"). Note: iMessage is great for handling image attachments.",
+      "Log the bug in the engineering tracker (via MCP/API) with the attached media.",
+      "Provide the user with a timeline for a fix or escalate to a specialized technical support human."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  }
+]

@@ -75,6 +75,8 @@ interface ConversationState {
     productId: string
     currentOffer: number
   }
+  firstMessageShown: boolean
+  humanHandoffRequested: boolean
 }
 
 const conversations = new Map<string, ConversationState>()
@@ -82,10 +84,25 @@ const conversations = new Map<string, ConversationState>()
 function getConversation(sessionId: string): ConversationState {
   if (!conversations.has(sessionId)) {
     conversations.set(sessionId, {
-      messageHistory: []
+      messageHistory: [],
+      firstMessageShown: false,
+      humanHandoffRequested: false
     })
   }
   return conversations.get(sessionId)!
+}
+
+function detectHumanHandoff(message: string): boolean {
+  const handoffPhrases = [
+    'speak to a human', 'talk to a person', 'real person', 'human agent',
+    'customer service', 'representative', 'speak to someone', 'talk to agent',
+    'need a human', 'want a person', 'actual person', 'live agent',
+    'human help', 'human support'
+  ]
+  
+  return handoffPhrases.some(phrase => 
+    message.toLowerCase().includes(phrase)
+  )
 }
 
 async function getRelevantContext(query: string): Promise<string> {
@@ -185,6 +202,14 @@ async function generateResponse(
   
   const conversation = getConversation(sessionId)
   
+  // Check if this is the first message
+  const isFirstMessage = conversation.messageHistory.length === 0 && !conversation.firstMessageShown
+  
+  // Check for human handoff request
+  if (detectHumanHandoff(userMessage)) {
+    conversation.humanHandoffRequested = true
+  }
+  
   // Add user message to history
   conversation.messageHistory.push({
     role: 'user',
@@ -194,6 +219,21 @@ async function generateResponse(
   // Keep only last 10 messages
   if (conversation.messageHistory.length > 10) {
     conversation.messageHistory = conversation.messageHistory.slice(-10)
+  }
+  
+  // If human handoff requested, provide appropriate response
+  if (conversation.humanHandoffRequested) {
+    const handoffMessage = "I understand you'd like to speak with a human. Human handoff functionality is being set up and will be available soon. In the meantime, I'm here to help with any questions you have!"
+    
+    conversation.messageHistory.push({
+      role: 'assistant',
+      content: handoffMessage
+    })
+    
+    // Reset flag after acknowledging (in production, this would route to human)
+    conversation.humanHandoffRequested = false
+    
+    return handoffMessage
   }
   
   // Detect product inquiries
@@ -257,12 +297,19 @@ ${productCatalog.getProductDescription(product.id)}`
   const assistantMessage = completion.choices[0].message.content || 
     generateErrorResponse(COMPANY_CONFIG)
   
+  // Add Jake greeting if first message
+  let finalMessage = assistantMessage
+  if (isFirstMessage) {
+    finalMessage = `Hi! I'm Jake, an AI Assistant.\n${assistantMessage}\n\nIf you want to contact a human, let me know.`
+    conversation.firstMessageShown = true
+  }
+  
   conversation.messageHistory.push({
     role: 'assistant',
-    content: assistantMessage
+    content: finalMessage
   })
   
-  return assistantMessage
+  return finalMessage
 }
 
 export async function POST(request: NextRequest) {

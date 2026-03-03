@@ -73,6 +73,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Normalize URL - add https:// if no protocol specified (and URL is not empty)
+    let normalizedUrl = config.websiteUrl.trim()
+    if (normalizedUrl && !normalizedUrl.match(/^https?:\/\//i)) {
+      normalizedUrl = `https://${normalizedUrl}`
+    }
+
     // Ensure config directory exists
     const configDir = path.dirname(CONFIG_FILE)
     await fs.mkdir(configDir, { recursive: true })
@@ -89,7 +95,7 @@ export async function POST(request: NextRequest) {
     // Merge with new config - only update the actual config fields
     const updatedConfig = {
       ...existingContent,
-      websiteUrl: config.websiteUrl,
+      websiteUrl: normalizedUrl,
       includeSameOriginSubdomains: config.includeSameOriginSubdomains,
       maxDepth: config.maxDepth
     }
