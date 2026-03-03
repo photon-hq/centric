@@ -1,0 +1,31 @@
+{
+  "name": "taxpro-support-agent",
+  "version": "1.0.0",
+  "description": "AI-powered iMessage customer support agent for TaxPro tax services",
+  "type": "module",
+  "main": "tax-support-agent.ts",
+  "scripts": {
+    "start": "bun run tax-support-agent.ts",
+    "dev": "bun --watch tax-support-agent.ts",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "imessage",
+    "ai",
+    "customer-support",
+    "tax",
+    "chatbot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
