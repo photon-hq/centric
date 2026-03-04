@@ -8,8 +8,17 @@ interface ScrapeConfig {
   websiteUrl: string
   includeSameOriginSubdomains: boolean
   maxDepth: number
+  autoUpdateEnabled?: boolean
+  autoUpdateIntervalMinutes?: number
   lastScraped?: string
   totalPages?: number
+  lastScrapeStats?: {
+    processedPages: number
+    newPages: number
+    updatedPages: number
+    unchangedPages: number
+    discoveredUrls: number
+  }
 }
 
 // GET - Load configuration
@@ -23,8 +32,11 @@ export async function GET() {
       websiteUrl: config.websiteUrl || '',
       includeSameOriginSubdomains: config.includeSameOriginSubdomains ?? true,
       maxDepth: config.maxDepth || 3,
+      autoUpdateEnabled: config.autoUpdateEnabled ?? false,
+      autoUpdateIntervalMinutes: config.autoUpdateIntervalMinutes || 60,
       lastScraped: config.lastScraped,
-      totalPages: config.totalPages
+      totalPages: config.totalPages,
+      lastScrapeStats: config.lastScrapeStats
     }
     
     return NextResponse.json({ config: cleanConfig })
@@ -34,7 +46,9 @@ export async function GET() {
       config: {
         websiteUrl: '',
         includeSameOriginSubdomains: true,
-        maxDepth: 3
+        maxDepth: 3,
+        autoUpdateEnabled: false,
+        autoUpdateIntervalMinutes: 60
       }
     })
   }
@@ -97,12 +111,15 @@ export async function POST(request: NextRequest) {
       ...existingContent,
       websiteUrl: normalizedUrl,
       includeSameOriginSubdomains: config.includeSameOriginSubdomains,
-      maxDepth: config.maxDepth
+      maxDepth: config.maxDepth,
+      autoUpdateEnabled: config.autoUpdateEnabled ?? existingContent.autoUpdateEnabled ?? false,
+      autoUpdateIntervalMinutes: config.autoUpdateIntervalMinutes ?? existingContent.autoUpdateIntervalMinutes ?? 60
     }
     
     // Only add these if they're defined
     if (config.lastScraped) updatedConfig.lastScraped = config.lastScraped
     if (config.totalPages !== undefined) updatedConfig.totalPages = config.totalPages
+    if (config.lastScrapeStats) updatedConfig.lastScrapeStats = config.lastScrapeStats
 
     // Save config
     await fs.writeFile(CONFIG_FILE, JSON.stringify(updatedConfig, null, 2))

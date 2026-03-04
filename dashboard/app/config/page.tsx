@@ -36,8 +36,17 @@ interface ScrapeConfig {
   websiteUrl: string
   includeSameOriginSubdomains: boolean
   maxDepth: number
+  autoUpdateEnabled?: boolean
+  autoUpdateIntervalMinutes?: number
   lastScraped?: string
   totalPages?: number
+  lastScrapeStats?: {
+    processedPages: number
+    newPages: number
+    updatedPages: number
+    unchangedPages: number
+    discoveredUrls: number
+  }
   status?: 'idle' | 'scraping' | 'complete' | 'error'
 }
 
@@ -73,9 +82,26 @@ export default function ConfigPage() {
   const [config, setConfig] = useState<ScrapeConfig>({
     websiteUrl: '',
     includeSameOriginSubdomains: true,
-    maxDepth: 3
+    maxDepth: 3,
+    autoUpdateEnabled: false,
+    autoUpdateIntervalMinutes: 60
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [isSavingAutoUpdate, setIsSavingAutoUpdate] = useState(false)
+  const [autoUpdateStatus, setAutoUpdateStatus] = useState<{
+    enabled: boolean
+    intervalMinutes: number
+    running: boolean
+    lastRun: string | null
+    lastResult: {
+      processedPages: number
+      newPages: number
+      updatedPages: number
+      unchangedPages: number
+      discoveredUrls: number
+      stalePagesRemoved: number
+    } | null
+  } | null>(null)
   const [scrapeProgress, setScrapeProgress] = useState<{
     current: number
     total: number
@@ -139,13 +165,34 @@ export default function ConfigPage() {
   // File input refs for import
   const sopFileInputRef = useRef<HTMLInputElement>(null)
   const mcpFileInputRef = useRef<HTMLInputElement>(null)
+  const lastObservedAutoRunRef = useRef<string | null>(null)
 
   useEffect(() => {
     loadConfig()
     loadDocuments()
     loadSOPs()
     loadMCPConfig()
+    loadAutoUpdateStatus()
   }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadAutoUpdateStatus()
+    }, 10000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    const lastRun = autoUpdateStatus?.lastRun || null
+    if (!lastRun) return
+
+    if (lastObservedAutoRunRef.current !== lastRun) {
+      lastObservedAutoRunRef.current = lastRun
+      loadConfig()
+      loadDocuments()
+    }
+  }, [autoUpdateStatus?.lastRun])
 
   // Auto-save config with debounce
   useEffect(() => {
@@ -189,6 +236,17 @@ export default function ConfigPage() {
       console.error('Error loading documents:', error)
     } finally {
       setIsLoadingDocs(false)
+    }
+  }
+
+  const loadAutoUpdateStatus = async () => {
+    try {
+      const response = await fetch('/api/scrape/auto')
+      if (!response.ok) return
+      const data = await response.json()
+      setAutoUpdateStatus(data)
+    } catch (error) {
+      console.error('Error loading auto-update status:', error)
     }
   }
 
@@ -241,11 +299,11 @@ export default function ConfigPage() {
                 } else if (data.type === 'complete') {
                   setMessage({
                     type: 'success',
-                    text: `Successfully scraped ${data.totalPages} pages! Documents saved to documents/ folder.`
+                    text: `Scrape complete: ${data.newPages || 0} new, ${data.updatedPages || 0} updated, ${data.unchangedPages || 0} unchanged, ${data.stalePagesRemoved || 0} removed pages.`
                   })
                   setScrapeProgress(null)
-                  await loadConfig() // Reload config to show updated stats
-                  // Refresh knowledge base
+                  await loadConfig()
+                  await loadDocuments()
                   await fetch('/api/reinitialize', { method: 'POST' })
                 } else if (data.type === 'error') {
                   setMessage({ type: 'error', text: data.message })
@@ -279,6 +337,55 @@ export default function ConfigPage() {
       } else {
         setMessage({ type: 'error', text: 'Failed to save configuration' })
       }
+    } catch (error) {
+      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
+    }
+  }
+
+  const handleSaveAutoUpdate = async () => {
+    setIsSavingAutoUpdate(true)
+    try {
+      const response = await fetch('/api/scrape/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'configure',
+          enabled: config.autoUpdateEnabled,
+          intervalMinutes: config.autoUpdateIntervalMinutes || 60
+        })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to save auto update settings')
+      }
+
+      await loadAutoUpdateStatus()
+      await loadConfig()
+      setMessage({ type: 'success', text: 'Auto update settings saved' })
+    } catch (error) {
+      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
+    } finally {
+      setIsSavingAutoUpdate(false)
+    }
+  }
+
+  const handleRunAutoUpdateNow = async () => {
+    try {
+      const response = await fetch('/api/scrape/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run-now' })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to run auto update')
+      }
+
+      await fetch('/api/reinitialize', { method: 'POST' })
+      await Promise.all([loadConfig(), loadDocuments(), loadAutoUpdateStatus()])
+      setMessage({ type: 'success', text: 'Auto update run complete. Indexed knowledge refreshed.' })
     } catch (error) {
       setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
     }
@@ -1143,6 +1250,65 @@ export default function ConfigPage() {
                     <span>5 (Deep)</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Auto Update Settings */}
+              <div className="mb-6 p-4 border border-gray-100 rounded-xl bg-gray-50/60">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Auto Update Knowledge Base</p>
+                    <p className="text-xs text-gray-500 mt-1">Automatically crawl and update changed pages on a schedule.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(config.autoUpdateEnabled)}
+                      onChange={(e) => setConfig({ ...config, autoUpdateEnabled: e.target.checked })}
+                      className="sr-only peer"
+                      disabled={isLoading || isSavingAutoUpdate}
+                    />
+                    <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-black after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                  </label>
+                </div>
+
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium mb-1 text-gray-600">Interval (minutes)</label>
+                    <input
+                      type="number"
+                      min={5}
+                      max={1440}
+                      value={config.autoUpdateIntervalMinutes || 60}
+                      onChange={(e) => setConfig({ ...config, autoUpdateIntervalMinutes: Math.max(5, Number(e.target.value) || 60) })}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+                      disabled={isSavingAutoUpdate}
+                    />
+                  </div>
+                  <button
+                    onClick={handleSaveAutoUpdate}
+                    disabled={isSavingAutoUpdate || !config.websiteUrl}
+                    className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    {isSavingAutoUpdate ? 'Saving...' : 'Apply Auto Update'}
+                  </button>
+                  <button
+                    onClick={handleRunAutoUpdateNow}
+                    disabled={!config.websiteUrl || autoUpdateStatus?.running}
+                    className="px-4 py-2 bg-gray-100 text-gray-800 text-sm rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    Run Now
+                  </button>
+                </div>
+
+                {autoUpdateStatus && (
+                  <p className="mt-3 text-xs text-gray-500">
+                    Status: {autoUpdateStatus.running ? 'Running' : autoUpdateStatus.enabled ? 'Enabled' : 'Disabled'}
+                    {autoUpdateStatus.lastRun ? ` • Last run: ${new Date(autoUpdateStatus.lastRun).toLocaleString()}` : ''}
+                    {autoUpdateStatus.lastResult
+                      ? ` • New: ${autoUpdateStatus.lastResult.newPages}, Updated: ${autoUpdateStatus.lastResult.updatedPages}, Unchanged: ${autoUpdateStatus.lastResult.unchangedPages}, Removed: ${autoUpdateStatus.lastResult.stalePagesRemoved}`
+                      : ''}
+                  </p>
+                )}
               </div>
 
               {/* Action Buttons */}

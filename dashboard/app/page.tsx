@@ -25,6 +25,7 @@ export default function Home() {
   const [setupComplete, setSetupComplete] = useState(true)
   const [setupMessage, setSetupMessage] = useState('')
   const [documentCount, setDocumentCount] = useState(0)
+  const [lastScraped, setLastScraped] = useState<string | null>(null)
   const [statusInterval, setStatusInterval] = useState<NodeJS.Timeout | null>(null)
 
   // Check setup status on mount
@@ -32,6 +33,14 @@ export default function Home() {
     checkSetupStatus()
     // Check initial iMessage status once
     checkStatus()
+  }, [])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkSetupStatus()
+    }, 15000)
+
+    return () => clearInterval(interval)
   }, [])
 
   // Poll for status only when iMessage is running
@@ -60,6 +69,7 @@ export default function Home() {
       setSetupComplete(data.complete)
       setSetupMessage(data.message)
       setDocumentCount(data.documentCount)
+      setLastScraped(data.lastScraped || null)
     } catch (error) {
       console.error('Failed to check setup status:', error)
     }
@@ -149,7 +159,7 @@ export default function Home() {
               {setupComplete && documentCount > 0 && (
                 <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   <CheckCircle className="w-3 h-3" />
-                  {documentCount} documents indexed
+                  {documentCount} documents indexed{lastScraped ? ` • Updated ${new Date(lastScraped).toLocaleTimeString()}` : ''}
                 </div>
               )}
             </div>

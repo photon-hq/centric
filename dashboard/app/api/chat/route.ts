@@ -4,6 +4,7 @@ import { DocumentVectorStore } from '../../../lib/vector-store'
 import { ProductCatalog, type Product, type NegotiableProduct } from '../../../lib/product-catalog'
 import { COMPANY_CONFIG } from '../../../config/company'
 import { generateSystemPrompt, generateContextPrompt, generateNegotiationResponse, generatePurchaseResponse, generateFixedPriceResponse, generateErrorResponse } from '../../../config/prompts'
+import { readKnowledgeVersion } from '../../../lib/knowledge-version'
 import * as path from 'path'
 import * as fsSync from 'fs'
 
@@ -51,6 +52,7 @@ let vectorStore: DocumentVectorStore | null = null
 let productCatalog: ProductCatalog | null = null
 let isInitialized = false
 let initPromise: Promise<void> | null = null
+let loadedKnowledgeVersion = '0'
 
 // ============================================================================
 // MCP Integration
@@ -255,7 +257,19 @@ async function initialize() {
   }
 }
 
+async function ensureKnowledgeBaseVersion(): Promise<void> {
+  const currentVersion = await readKnowledgeVersion()
+  if (currentVersion !== loadedKnowledgeVersion) {
+    isInitialized = false
+    initPromise = null
+    vectorStore = null
+    loadedKnowledgeVersion = currentVersion
+  }
+}
+
 async function waitForInitialization(timeoutMs: number = 6000): Promise<void> {
+  await ensureKnowledgeBaseVersion()
+
   const ensureInit = initialize().catch((error) => {
     console.warn('⚠️  Initialization failed:', error)
   })

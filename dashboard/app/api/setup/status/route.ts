@@ -15,15 +15,18 @@ export async function GET() {
         // Check if config exists and has a website URL
         let hasConfig = false
         let websiteUrl = ''
+        let lastScraped: string | null = null
+        let autoUpdateEnabled = false
         
         if (existsSync(configFile)) {
             try {
                 const configContent = await readFile(configFile, 'utf-8')
                 const config = JSON.parse(configContent)
                 websiteUrl = config.websiteUrl || ''
+                lastScraped = config.lastScraped || null
+                autoUpdateEnabled = config.autoUpdateEnabled ?? false
                 hasConfig = websiteUrl.length > 0
             } catch (error) {
-                // Invalid config file
                 hasConfig = false
             }
         }
@@ -43,6 +46,8 @@ export async function GET() {
             hasConfig,
             websiteUrl,
             documentCount,
+            lastScraped,
+            autoUpdateEnabled,
             message: isComplete 
                 ? 'Knowledge base ready! iMessage agent can be deployed.'
                 : 'Please scrape your website or upload documents to build the knowledge base'
