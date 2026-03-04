@@ -25,14 +25,40 @@ export default function ChatInterface() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isUserNearBottomRef = useRef<boolean>(true)
+  const shouldScrollRef = useRef<boolean>(false)
 
   const scrollToBottom = () => {
+    const container = messagesContainerRef.current
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+      return
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   useEffect(() => {
-    scrollToBottom()
+    if (shouldScrollRef.current || isUserNearBottomRef.current) {
+      scrollToBottom()
+    }
+    shouldScrollRef.current = false
   }, [messages])
+
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el
+      isUserNearBottomRef.current = scrollHeight - (scrollTop + clientHeight) < 100
+    }
+
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    // initialize
+    handleScroll()
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,6 +71,7 @@ export default function ChatInterface() {
     }
 
     setMessages(prev => [...prev, userMessage])
+    shouldScrollRef.current = true
     setInput('')
     setIsLoading(true)
 
@@ -118,7 +145,7 @@ export default function ChatInterface() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50">
         {messages.map((message, index) => (
           <div
             key={index}

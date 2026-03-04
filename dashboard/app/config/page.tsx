@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { 
   Globe, 
@@ -27,7 +27,9 @@ import {
   Plug,
   Server,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Download,
+  FileDown
 } from 'lucide-react'
 
 interface ScrapeConfig {
@@ -133,6 +135,10 @@ export default function ConfigPage() {
     command: '',
     args: ''
   })
+
+  // File input refs for import
+  const sopFileInputRef = useRef<HTMLInputElement>(null)
+  const mcpFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadConfig()
@@ -703,6 +709,333 @@ export default function ConfigPage() {
     }
   }
 
+  // SOP Import/Export Functions
+  const handleExportSOPs = () => {
+    const dataStr = JSON.stringify(sops, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `sops-export-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    setMessage({ type: 'success', text: `Exported ${sops.length} SOPs` })
+  }
+
+  const handleImportSOPs = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      let importedData = JSON.parse(text)
+
+      // Support both single SOP object and array of SOPs
+      let importedSOPs: any[] = []
+      if (Array.isArray(importedData)) {
+        importedSOPs = importedData
+      } else if (importedData && typeof importedData === 'object' && importedData.title) {
+        // Single SOP object
+        importedSOPs = [importedData]
+      } else {
+        setMessage({ type: 'error', text: 'Invalid SOP file format. Expected a single SOP object or array of SOPs.' })
+        return
+      }
+
+      // Validate SOP structure
+      const isValid = importedSOPs.every(sop => 
+        sop.title && sop.objective && sop.trigger && Array.isArray(sop.steps)
+      )
+
+      if (!isValid) {
+        setMessage({ type: 'error', text: 'Invalid SOP structure. Each SOP must have title, objective, trigger, and steps.' })
+        return
+      }
+
+      // Normalize steps - handle both string arrays and object arrays with 'step' property
+      importedSOPs = importedSOPs.map(sop => ({
+        ...sop,
+        steps: sop.steps.map((step: any) => {
+          if (typeof step === 'string') {
+            return step
+          } else if (typeof step === 'object' && step.step) {
+            return step.step
+          } else {
+            return String(step)
+          }
+        })
+      }))
+
+      // Helper to check if two SOPs are identical
+      const areSopsIdentical = (sop1: any, sop2: any) => {
+        return sop1.objective === sop2.objective &&
+               sop1.trigger === sop2.trigger &&
+               JSON.stringify(sop1.steps) === JSON.stringify(sop2.steps)
+      }
+
+      // Helper to find next available duplicate name
+      const getUniqueSopTitle = (baseTitle: string, existingSOPs: SOP[]) => {
+        const existingTitles = existingSOPs.map(s => s.title)
+        if (!existingTitles.includes(baseTitle)) {
+          return baseTitle
+        }
+
+        let duplicateNum = 1
+        let newTitle = `${baseTitle}-duplicate-${duplicateNum}`
+        while (existingTitles.includes(newTitle)) {
+          duplicateNum++
+          newTitle = `${baseTitle}-duplicate-${duplicateNum}`
+        }
+        return newTitle
+      }
+
+      // Import each SOP
+      let successCount = 0
+      let errorCount = 0
+      let duplicateCount = 0
+
+      for (const sop of importedSOPs) {
+        try {
+          // Check if SOP with same title exists
+          const existingSOP = sops.find(s => s.title === sop.title)
+          
+          let titleToUse = sop.title
+
+          if (existingSOP) {
+            // Check if content is identical
+            if (areSopsIdentical(sop, existingSOP)) {
+              // Skip identical SOPs
+              duplicateCount++
+              continue
+            } else {
+              // Different content, create with duplicate suffix
+              titleToUse = getUniqueSopTitle(sop.title, sops)
+            }
+          }
+
+          const response = await fetch('/api/sops', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: titleToUse,
+              objective: sop.objective,
+              trigger: sop.trigger,
+              steps: sop.steps
+            })
+          })
+
+          if (response.ok) {
+            successCount++
+            // Update local sops list for subsequent duplicate checks
+            const newSop = await response.json()
+            setSOPs(prev => [...prev, newSop.sop])
+          } else {
+            errorCount++
+          }
+        } catch (error) {
+          errorCount++
+          console.error('Error importing SOP:', error)
+        }
+      }
+
+      await loadSOPs()
+      await fetch('/api/reinitialize', { method: 'POST' })
+      
+      let message = `Imported ${successCount} SOPs`
+      if (duplicateCount > 0) {
+        message += `, skipped ${duplicateCount} identical`
+      }
+      if (errorCount > 0) {
+        message += `, ${errorCount} failed`
+      }
+      
+      setMessage({ 
+        type: errorCount > 0 ? 'info' : 'success', 
+        text: message 
+      })
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to parse JSON file' })
+      console.error('Import error:', error)
+    } finally {
+      // Reset file input
+      if (sopFileInputRef.current) {
+        sopFileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // MCP Import/Export Functions
+  const handleExportMCP = () => {
+    const exportData = {
+      enabled: mcpConfig.enabled,
+      servers: mcpConfig.servers,
+      exportedAt: new Date().toISOString()
+    }
+    const dataStr = JSON.stringify(exportData, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `mcp-config-export-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    setMessage({ type: 'success', text: `Exported MCP config with ${mcpConfig.servers.length} servers` })
+  }
+
+  const handleImportMCP = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      let importedData = JSON.parse(text)
+
+      // Support both single server object and config with servers array
+      let importedServers: any[] = []
+      
+      if (Array.isArray(importedData)) {
+        // Direct array of servers
+        importedServers = importedData
+      } else if (importedData.servers && Array.isArray(importedData.servers)) {
+        // Config object with servers array
+        importedServers = importedData.servers
+      } else if (importedData && typeof importedData === 'object' && importedData.name && importedData.type) {
+        // Single server object
+        importedServers = [importedData]
+      } else {
+        setMessage({ type: 'error', text: 'Invalid MCP file format. Expected a server object, array of servers, or config with servers array.' })
+        return
+      }
+
+      // Validate server structure
+      const isValid = importedServers.every((server: any) => 
+        server.name && server.type && 
+        (server.type === 'stdio' ? server.command : true)
+      )
+
+      if (!isValid) {
+        setMessage({ type: 'error', text: 'Invalid server structure. Each server must have name, type, and command (for stdio) or url (for SSE/HTTP).' })
+        return
+      }
+
+      // Helper to check if two servers are identical
+      const areServersIdentical = (server1: any, server2: any) => {
+        const s1 = {
+          type: server1.type,
+          url: server1.url || '',
+          apiKey: server1.apiKey || '',
+          command: server1.command || '',
+          args: JSON.stringify(server1.args || [])
+        }
+        const s2 = {
+          type: server2.type,
+          url: server2.url || '',
+          apiKey: server2.apiKey || '',
+          command: server2.command || '',
+          args: JSON.stringify(server2.args || [])
+        }
+        return JSON.stringify(s1) === JSON.stringify(s2)
+      }
+
+      // Helper to find next available duplicate name
+      const getUniqueServerName = (baseName: string, existingServers: MCPServer[]) => {
+        const existingNames = existingServers.map(s => s.name)
+        if (!existingNames.includes(baseName)) {
+          return baseName
+        }
+
+        let duplicateNum = 1
+        let newName = `${baseName}-duplicate-${duplicateNum}`
+        while (existingNames.includes(newName)) {
+          duplicateNum++
+          newName = `${baseName}-duplicate-${duplicateNum}`
+        }
+        return newName
+      }
+
+      // Import each server
+      let successCount = 0
+      let errorCount = 0
+      let duplicateCount = 0
+
+      for (const server of importedServers) {
+        try {
+          // Check if server with same name exists
+          const existingServer = mcpConfig.servers.find(s => s.name === server.name)
+          
+          let nameToUse = server.name
+
+          if (existingServer) {
+            // Check if content is identical
+            if (areServersIdentical(server, existingServer)) {
+              // Skip identical servers
+              duplicateCount++
+              continue
+            } else {
+              // Different content, create with duplicate suffix
+              nameToUse = getUniqueServerName(server.name, mcpConfig.servers)
+            }
+          }
+
+          const response = await fetch('/api/mcp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: nameToUse,
+              url: server.url || '',
+              apiKey: server.apiKey || '',
+              type: server.type,
+              command: server.command || '',
+              args: server.args || []
+            })
+          })
+
+          if (response.ok) {
+            successCount++
+            // Update local config for subsequent duplicate checks
+            const newServer = await response.json()
+            setMCPConfig(prev => ({
+              ...prev,
+              servers: [...prev.servers, newServer.server]
+            }))
+          } else {
+            errorCount++
+          }
+        } catch (error) {
+          errorCount++
+          console.error('Error importing MCP server:', error)
+        }
+      }
+
+      await loadMCPConfig()
+      
+      let message = `Imported ${successCount} MCP servers`
+      if (duplicateCount > 0) {
+        message += `, skipped ${duplicateCount} identical`
+      }
+      if (errorCount > 0) {
+        message += `, ${errorCount} failed`
+      }
+      
+      setMessage({ 
+        type: errorCount > 0 ? 'info' : 'success', 
+        text: message 
+      })
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to parse JSON file' })
+      console.error('Import error:', error)
+    } finally {
+      // Reset file input
+      if (mcpFileInputRef.current) {
+        mcpFileInputRef.current.value = ''
+      }
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 text-black font-sans selection:bg-black selection:text-white">
       <div className="container mx-auto px-6 py-16 max-w-6xl">
@@ -1057,13 +1390,39 @@ export default function ConfigPage() {
                   <p className="text-xs text-gray-500">Define workflows and agent behavior</p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowNewSOPForm(!showNewSOPForm)}
-                className="flex items-center gap-2 px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                Add SOP
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportSOPs}
+                  disabled={sops.length === 0}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export all SOPs as JSON"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+                <button
+                  onClick={() => sopFileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all"
+                  title="Import SOPs from JSON"
+                >
+                  <Upload className="w-4 h-4" />
+                  Import
+                </button>
+                <input
+                  ref={sopFileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportSOPs}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => setShowNewSOPForm(!showNewSOPForm)}
+                  className="flex items-center gap-2 px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add SOP
+                </button>
+              </div>
             </div>
 
             {/* New SOP Form */}
@@ -1363,7 +1722,7 @@ export default function ConfigPage() {
                   <p className="text-xs text-gray-500">Connect external tools and services</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleToggleMCP(!mcpConfig.enabled)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
@@ -1384,6 +1743,30 @@ export default function ConfigPage() {
                     </>
                   )}
                 </button>
+                <button
+                  onClick={handleExportMCP}
+                  disabled={mcpConfig.servers.length === 0}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export MCP configuration as JSON"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+                <button
+                  onClick={() => mcpFileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all"
+                  title="Import MCP servers from JSON"
+                >
+                  <Upload className="w-4 h-4" />
+                  Import
+                </button>
+                <input
+                  ref={mcpFileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportMCP}
+                  className="hidden"
+                />
                 <button
                   onClick={() => setShowNewMCPForm(!showNewMCPForm)}
                   className="flex items-center gap-2 px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-all"

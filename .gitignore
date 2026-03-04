@@ -48,4 +48,7 @@ temp/
 .debugger/
 
 .reset-backups/
+
+# Local testing
+local-test/
 documents/
