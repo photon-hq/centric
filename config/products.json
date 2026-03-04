@@ -1,0 +1,49 @@
+{
+  "products": [
+    {
+      "id": "premium-support",
+      "name": "Premium Support Package",
+      "description": "24/7 dedicated support with priority response times",
+      "price": 299,
+      "negotiable": true,
+      "lowestNegotiationPrice": 249,
+      "features": [
+        "24/7 availability",
+        "Priority response within 1 hour",
+        "Dedicated support specialist",
+        "Unlimited support tickets",
+        "Phone, email, and chat support"
+      ],
+      "keywords": ["premium", "support", "24/7", "dedicated", "priority"]
+    },
+    {
+      "id": "standard-support",
+      "name": "Standard Support Package",
+      "description": "Business hours support with next-day response",
+      "price": 99,
+      "negotiable": false,
+      "features": [
+        "Business hours support (9 AM - 5 PM)",
+        "Response within 24 hours",
+        "Email and chat support",
+        "Up to 10 support tickets per month"
+      ],
+      "keywords": ["standard", "support", "business hours", "affordable"]
+    },
+    {
+      "id": "consultation-session",
+      "name": "Expert Consultation",
+      "description": "One-on-one session with our experts",
+      "price": 199,
+      "negotiable": true,
+      "lowestNegotiationPrice": 149,
+      "features": [
+        "1-hour video consultation",
+        "Personalized recommendations",
+        "Follow-up summary report",
+        "30-day email support included"
+      ],
+      "keywords": ["consultation", "expert", "advice", "session", "call"]
+    }
+  ]
+}

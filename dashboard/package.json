@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@photon/core": "*",
     "cheerio": "^1.2.0",
     "lucide-react": "^0.576.0",
     "next": "^15.1.6",

@@ -1,0 +1,26 @@
+{
+  "name": "My Company",
+  "industry": "Customer Support",
+  "description": "AI-powered customer support for our business",
+  "website": "",
+  "phone": "",
+  "email": "",
+  "agentName": "Assistant",
+  "features": [
+    "Product information and recommendations",
+    "Order support and tracking",
+    "Account management",
+    "Technical support",
+    "Billing inquiries"
+  ],
+  "greeting": {
+    "enabled": true,
+    "template": "Hi! I'm {agentName}, {companyName}'s AI assistant. How can I help you today?",
+    "showHumanEscalation": true
+  },
+  "humanHandoff": {
+    "enabled": true,
+    "keywords": ["human", "person", "representative", "agent", "speak to someone"],
+    "message": "I'll connect you with a team member. Please hold on."
+  }
+}

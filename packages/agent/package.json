@@ -1,0 +1,21 @@
+{
+  "name": "@photon/agent",
+  "version": "2.0.0",
+  "description": "iMessage customer support agent",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@photon/core": "*",
+    "@photon-ai/imessage-kit": "*",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

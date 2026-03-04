@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
-import { DocumentVectorStore } from '../../../lib/vector-store'
-import { ProductCatalog, type Product, type NegotiableProduct } from '../../../lib/product-catalog'
-import { COMPANY_CONFIG } from '../../../config/company'
-import { generateSystemPrompt, generateContextPrompt, generateNegotiationResponse, generatePurchaseResponse, generateFixedPriceResponse, generateErrorResponse } from '../../../config/prompts'
+import { 
+  DocumentVectorStore, 
+  ProductCatalog, 
+  type Product, 
+  type NegotiableProduct,
+  generateSystemPrompt, 
+  generateContextPrompt, 
+  generateNegotiationResponse, 
+  generatePurchaseResponse, 
+  generateFixedPriceResponse, 
+  generateErrorResponse,
+  ConfigLoader,
+  type LoadedConfig
+} from '@photon/core'
 import { readKnowledgeVersion } from '../../../lib/knowledge-version'
 import * as path from 'path'
 import * as fsSync from 'fs'
@@ -22,7 +32,7 @@ function loadParentEnvSync() {
         data.split(/\r?\n/).forEach(line => {
           const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)$/)
           if (!m) return
-          let key = m[1]
+          const key = m[1]
           let val = m[2] || ''
           if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
             val = val.slice(1, -1)
@@ -48,6 +58,7 @@ const openai = new OpenAI({
 })
 
 // Initialize components (singleton pattern)
+let config: LoadedConfig | null = null
 let vectorStore: DocumentVectorStore | null = null
 let productCatalog: ProductCatalog | null = null
 let isInitialized = false
@@ -229,14 +240,26 @@ async function initialize() {
   if (initPromise) return initPromise
 
   initPromise = (async () => {
+    // Load configuration
+    if (!config) {
+      const configLoader = new ConfigLoader({ 
+        configDir: path.join(process.cwd(), '..', 'config')
+      })
+      config = await configLoader.loadAll()
+    }
+
     const documentsPath = path.join(process.cwd(), '..', 'documents')
 
     if (!vectorStore) {
-      vectorStore = new DocumentVectorStore(documentsPath, openai)
+      vectorStore = new DocumentVectorStore(
+        documentsPath, 
+        openai,
+        config.ai.embeddingModel
+      )
     }
 
     if (!productCatalog) {
-      productCatalog = new ProductCatalog()
+      productCatalog = new ProductCatalog(config.products)
     }
 
     await vectorStore.initialize()
@@ -245,7 +268,7 @@ async function initialize() {
     await loadMCPConfig()
 
     isInitialized = true
-    console.log(`✅ Agent initialized with ${vectorStore.getDocumentCount()} documents for ${COMPANY_CONFIG.name}`)
+    console.log(`✅ Agent initialized with ${vectorStore.getDocumentCount()} documents for ${config.company.name}`)
   })()
 
   try {
@@ -279,9 +302,6 @@ async function waitForInitialization(timeoutMs: number = 6000): Promise<void> {
     new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))
   ])
 }
-
-// Generate system prompt from company configuration
-const SYSTEM_PROMPT = generateSystemPrompt(COMPANY_CONFIG)
 
 // Conversation state (in-memory for demo, could use Redis/DB for production)
 interface ConversationState {
@@ -456,8 +476,10 @@ async function generateResponse(
   let productContext = ''
   
   if (product && productCatalog) {
+    // Build product description
+    const desc = `${product.name} - $${product.price}${product.negotiable ? ' (negotiable)' : ''}\n${product.description}\nFeatures:\n${product.features.map(f => `- ${f}`).join('\n')}`
     productContext = `\n\nRELEVANT PRODUCT INFORMATION:
-${productCatalog.getProductDescription(product.id)}`
+${desc}`
     
     // Check for negotiation
     if (detectPriceNegotiation(userMessage) && 'negotiable' in product) {
@@ -476,7 +498,7 @@ ${productCatalog.getProductDescription(product.id)}`
     // Check for purchase intent
     if (detectPurchaseIntent(userMessage)) {
       const price = conversation.currentNegotiation?.currentOffer || product.price
-      const purchaseResponse = generatePurchaseResponse(COMPANY_CONFIG, product.name, price)
+      const purchaseResponse = generatePurchaseResponse(config!.company, product.name, price, config!.features.timeConstraints.responseTimeMinutes)
       
       conversation.messageHistory.push({
         role: 'assistant',
@@ -492,9 +514,12 @@ ${productCatalog.getProductDescription(product.id)}`
   // Build context
   const contextPrompt = generateContextPrompt(documentContext, productContext)
   
+  // Generate system prompt from config
+  const systemPrompt = generateSystemPrompt(config!.company, config!.sops || [], config!.features)
+  
   // Generate AI response with MCP tool support
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
     { role: 'system', content: contextPrompt },
     ...conversation.messageHistory.map(msg => ({
       role: msg.role as 'user' | 'assistant',
@@ -516,7 +541,7 @@ ${productCatalog.getProductDescription(product.id)}`
   }
   
   let assistantMessage = ''
-  let maxIterations = 5 // Prevent infinite loops
+  const maxIterations = 5 // Prevent infinite loops
   let iteration = 0
   
   // Tool calling loop
@@ -570,7 +595,7 @@ ${productCatalog.getProductDescription(product.id)}`
       completionOptions.messages = messages
     } else {
       // Got final text response
-      assistantMessage = choice.message.content || generateErrorResponse(COMPANY_CONFIG)
+      assistantMessage = choice.message.content || generateErrorResponse(config!.company)
       break
     }
   }

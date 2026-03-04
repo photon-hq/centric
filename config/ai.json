@@ -1,0 +1,8 @@
+{
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "temperature": 1,
+  "maxTokens": 5000,
+  "embeddingModel": "text-embedding-3-small",
+  "embeddingDimensions": 1536
+}

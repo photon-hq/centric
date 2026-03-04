@@ -1,0 +1,26 @@
+{
+  "negotiation": {
+    "enabled": true,
+    "defaultDiscount": 0.15,
+    "maxDiscount": 0.25,
+    "requiresApproval": false
+  },
+  "mcp": {
+    "enabled": false
+  },
+  "sops": {
+    "enabled": true,
+    "autoLoad": true,
+    "source": "config/sops.json"
+  },
+  "knowledgeBase": {
+    "enabled": true,
+    "documentsPath": "./documents",
+    "maxResults": 5,
+    "similarityThreshold": 0.7
+  },
+  "timeConstraints": {
+    "offerValidityHours": 24,
+    "responseTimeMinutes": 60
+  }
+}

@@ -297,6 +297,15 @@ export default function Home() {
               className="font-medium text-black hover:underline"
             >
               Photon
+            </a>{' '}
+            |{' '} View on {' '}
+            <a
+              href="https://github.com/photon-hq/centric"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-black hover:underline"
+            >
+              GitHub
             </a>
           </p>
         </footer>

@@ -1,0 +1,33 @@
+{
+  "name": "@photon/core",
+  "version": "2.0.0",
+  "description": "Core shared functionality for Photon Customer Support",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./config": "./dist/config/index.js",
+    "./lib": "./dist/lib/index.js",
+    "./mcp": "./dist/mcp/index.js",
+    "./utils": "./dist/utils/index.js",
+    "./errors": "./dist/errors/index.js",
+    "./logger": "./dist/logger/index.js",
+    "./types": "./dist/types/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {
+    "openai": "^4.77.0",
+    "zod": "^3.23.8",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
