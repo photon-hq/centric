@@ -193,9 +193,9 @@ Edit `app/api/chat/route.ts`:
 const SYSTEM_PROMPT = `Your custom prompt...`
 
 // Model settings
-model: 'gpt-4o',
-temperature: 0.7,
-max_tokens: 1000
+model: 'gpt-5-mini',
+temperature: 1,
+max_tokens: 5000
 
 // Negotiation discount
 const discountPercentage = 0.15  // 15% off
@@ -355,7 +355,7 @@ bun lint         # Run ESLint
 
 ## Related Files 📁
 
-- **Main Agent**: `../tax-support-agent.ts` (iMessage version)
+- **Main Agent**: `../support-agent.ts` (iMessage version)
 - **Documentation**: `../README.md`
 - **Examples**: `../EXAMPLES.md`
 

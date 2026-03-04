@@ -1,5 +1,19 @@
 [
   {
+    "id": "sop-greeting-0",
+    "title": "First Message Greeting SOP",
+    "objective": "Provide a warm, personalized first impression that establishes who you are and sets expectations for human escalation.",
+    "trigger": "The user sends their first message in a new conversation (messageHistory is empty).",
+    "steps": [
+      "Start with the greeting: 'Hi! I'm Centric, an AI Assistant.'",
+      "Provide your response to their question or message",
+      "End with: 'If you want to contact a human, let me know.'",
+      "This greeting should only appear once per conversation - subsequent messages should not repeat it."
+    ],
+    "enabled": true,
+    "createdAt": "2026-03-03T00:00:00.000Z"
+  },
+  {
     "id": "sop-auth-1",
     "title": "User Authentication & Verification SOP",
     "objective": "Securely identify the customer using their phone number without requiring them to leave the iMessage app, while protecting their data.",

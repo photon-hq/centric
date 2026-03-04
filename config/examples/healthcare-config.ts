@@ -5,7 +5,7 @@
  * 1. Replace the content of config/company.ts with this configuration
  * 2. Update the products array with your actual medical services
  * 3. Add relevant documents to the documents/ folder
- * 4. Run the agent: bun run tax-support-agent.ts
+ * 4. Run the agent: bun run support-agent.ts
  * 
  * IMPORTANT: This is a demonstration only. Real healthcare support systems
  * require HIPAA compliance, proper security measures, and should never

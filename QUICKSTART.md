@@ -130,7 +130,7 @@ To receive real iMessages:
 
 3. **Launch Agent:**
    - Use dashboard button to start
-   - Or run `bun run tax-support-agent.ts` directly
+   - Or run `bun run support-agent.ts` directly
 
 4. **Test:**
    - Send iMessage to your Mac's number

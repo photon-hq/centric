@@ -33,7 +33,7 @@ interface AgentConfig {
 const config: AgentConfig = {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     model: process.env.MODEL || 'gpt-5-mini',
-    temperature: parseFloat(process.env.TEMPERATURE || '0.7'),
+    temperature: parseFloat(process.env.TEMPERATURE || '1'),
     max_completion_tokens: parseInt(process.env.MAX_COMPLETION_TOKENS || '5000'),
     debug: true
 }
@@ -297,10 +297,10 @@ ${productCatalog.getProductDescription(product.id)}`
     const assistantMessage = completion.choices[0].message.content || 
         "I apologize, but I'm having trouble generating a response. Please try again."
     
-    // Add Jake greeting if first message
+    // Add Centric greeting if first message
     let finalMessage = assistantMessage
     if (isFirstMessage) {
-        finalMessage = `Hi! I'm Jake, an AI Assistant.\n${assistantMessage}\n\nIf you want to contact a human, let me know.`
+        finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you want to contact a human, let me know.`
         conversation.firstMessageShown = true
     }
     

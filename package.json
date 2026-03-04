@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "AI-powered iMessage customer support agent for TaxPro tax services",
   "type": "module",
-  "main": "tax-support-agent.ts",
+  "main": "support-agent.ts",
   "scripts": {
-    "start": "bun run tax-support-agent.ts",
-    "dev": "bun --watch tax-support-agent.ts",
+    "start": "bun run support-agent.ts",
+    "dev": "bun --watch support-agent.ts",
     "test": "echo \"No tests yet\" && exit 0"
   },
   "keywords": [

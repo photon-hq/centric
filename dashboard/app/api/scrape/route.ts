@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { promises as fs } from 'fs'
+import { existsSync, readdirSync } from 'fs'
 import path from 'path'
 import * as cheerio from 'cheerio'
 
@@ -100,6 +101,39 @@ function extractTextContent(html: string, url: string): string {
   return `# ${title}\n\nSource: ${url}\n\n${content}\n`
 }
 
+// Helper to check if URL is already indexed in documents
+async function isUrlAlreadyIndexed(url: string): Promise<boolean> {
+  try {
+    if (!existsSync(DOCUMENTS_DIR)) {
+      return false
+    }
+
+    const files = readdirSync(DOCUMENTS_DIR)
+    
+    // Check if any document contains this URL as a source
+    for (const file of files) {
+      if (!file.endsWith('.md')) continue
+      
+      try {
+        const filepath = path.join(DOCUMENTS_DIR, file)
+        const content = await fs.readFile(filepath, 'utf-8')
+        
+        // Look for "Source: [url]" pattern in the document
+        if (content.includes(`Source: ${url}`)) {
+          return true
+        }
+      } catch (e) {
+        // Skip files we can't read
+      }
+    }
+    
+    return false
+  } catch (error) {
+    console.error('Error checking indexed URLs:', error)
+    return false
+  }
+}
+
 // Main scraping function
 async function scrapeWebsite(
   config: ScrapeConfig,
@@ -126,6 +160,18 @@ async function scrapeWebsite(
     }
 
     visited.add(url)
+
+    // Check if URL is already indexed - skip if it is
+    const alreadyIndexed = await isUrlAlreadyIndexed(url)
+    if (alreadyIndexed) {
+      await sendProgress({
+        type: 'progress',
+        current: scrapedCount,
+        total: visited.size + queue.length,
+        url: `${url} (skipped - already indexed)`
+      })
+      continue
+    }
 
     try {
       await sendProgress({

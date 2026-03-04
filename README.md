@@ -357,7 +357,7 @@ Press `Ctrl+C` to gracefully shut down.
 ## Architecture 🏗️
 
 ```
-tax-support-agent.ts        # Main application
+support-agent.ts            # Main application
 ├── OpenAI (GPT-4o)          # LLM for responses
 ├── DocumentVectorStore      # RAG knowledge base
 │   └── OpenAI Embeddings    # Semantic search
@@ -453,13 +453,13 @@ These adapt automatically when you change company config - no manual prompt edit
 
 ### LLM Configuration
 
-Edit `tax-support-agent.ts` to adjust AI behavior:
+Edit `support-agent.ts` to adjust AI behavior:
 
 ```typescript
 const config: AgentConfig = {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     model: 'gpt-4o',              // or 'gpt-4', 'gpt-3.5-turbo'
-    temperature: 0.7,              // 0-1 (lower = more focused)
+    temperature: 1,              // 0-1 (lower = more focused)
     maxTokens: 1000,               // Response length limit
     debug: true                    // Enable/disable logging
 }
@@ -494,7 +494,7 @@ export const products = [
 - `negotiable: true` - Agent can offer discounts (specify `lowestNegotiationPrice`)
 - `negotiable: false` - Price is fixed, agent will not offer discounts
 
-**Negotiation Logic**: The agent offers up to 15% discount by default. Adjust this in `tax-support-agent.ts` or `dashboard/app/api/chat/route.ts` if needed.
+**Negotiation Logic**: The agent offers up to 15% discount by default. Adjust this in `support-agent.ts` or `dashboard/app/api/chat/route.ts` if needed.
 
 ### Knowledge Base Configuration
 
@@ -659,7 +659,7 @@ const sdk = new IMessageSDK({ debug: true })
 To extend this agent:
 
 1. **Create new industry configs** in `config/examples/`
-2. **Add new features** to `tax-support-agent.ts`
+2. **Add new features** to `support-agent.ts`
 3. **Enhance vector store** in `lib/vector-store.ts`
 4. **Add prompt generators** in `config/prompts.ts`
 5. **Share your configuration** via pull request

@@ -70,7 +70,7 @@ async function startAgent() {
 
     try {
         // Path to the agent script (one level up from dashboard)
-        const agentPath = path.join(process.cwd(), '..', 'tax-support-agent.ts')
+        const agentPath = path.join(process.cwd(), '..', 'support-agent.ts')
         
         // Start the agent process
         agentProcess = spawn('bun', ['run', agentPath], {
@@ -145,7 +145,7 @@ async function stopAgent() {
         await new Promise(resolve => setTimeout(resolve, 1000))
         
         // Force kill if still running
-        if (!agentProcess.killed) {
+        if (agentProcess && !agentProcess.killed) {
             agentProcess.kill('SIGKILL')
         }
 

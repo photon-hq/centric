@@ -17,12 +17,46 @@ interface SOP {
   createdAt: string
 }
 
+function ensureGreetingSOP(currentSOPs: SOP[], defaultSOPs: SOP[]): SOP[] {
+  const greetingId = 'sop-greeting-0'
+  const hasGreeting = currentSOPs.some((sop) => sop.id === greetingId)
+
+  if (hasGreeting) {
+    return currentSOPs
+  }
+
+  const defaultGreeting = defaultSOPs.find((sop) => sop.id === greetingId)
+  if (!defaultGreeting) {
+    return currentSOPs
+  }
+
+  return [defaultGreeting, ...currentSOPs]
+}
+
 async function loadSOPs(): Promise<SOP[]> {
   // First try to load custom SOPs
   if (fsSync.existsSync(SOPS_FILE)) {
     try {
       const data = await fs.readFile(SOPS_FILE, 'utf-8')
-      return JSON.parse(data)
+      const currentSOPs = JSON.parse(data) as SOP[]
+
+      if (fsSync.existsSync(DEFAULT_SOPS_FILE)) {
+        try {
+          const defaultData = await fs.readFile(DEFAULT_SOPS_FILE, 'utf-8')
+          const defaultSOPs = JSON.parse(defaultData) as SOP[]
+          const mergedSOPs = ensureGreetingSOP(currentSOPs, defaultSOPs)
+
+          if (mergedSOPs.length !== currentSOPs.length) {
+            await saveSOPs(mergedSOPs)
+          }
+
+          return mergedSOPs
+        } catch (e) {
+          console.error('Error merging default SOPs:', e)
+        }
+      }
+
+      return currentSOPs
     } catch (e) {
       console.error('Error loading SOPs:', e)
     }
@@ -52,7 +86,22 @@ async function saveSOPs(sops: SOP[]): Promise<void> {
 export async function GET() {
   try {
     const sops = await loadSOPs()
-    return NextResponse.json({ sops })
+
+    // mark which SOPs originated from defaults
+    let defaultIds = new Set<string>()
+    if (fsSync.existsSync(DEFAULT_SOPS_FILE)) {
+      try {
+        const defaultData = await fs.readFile(DEFAULT_SOPS_FILE, 'utf-8')
+        const defaultSOPs = JSON.parse(defaultData) as SOP[]
+        defaultSOPs.forEach(d => defaultIds.add(d.id))
+      } catch (e) {
+        // ignore default load errors
+      }
+    }
+
+    const sopsWithMeta = sops.map(s => ({ ...s, isDefault: defaultIds.has(s.id) }))
+
+    return NextResponse.json({ sops: sopsWithMeta })
   } catch (error) {
     console.error('Error loading SOPs:', error)
     return NextResponse.json(

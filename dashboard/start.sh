@@ -17,19 +17,19 @@ elif [ -f "$ALT_PARENT_ENV" ]; then
 else
     echo "⚠️  No environment file found in parent folder (../.env.local or ../.env)"
     echo ""
-    echo "Please add your OpenAI API key to ../.env.local or ../.env"
+    echo "Please add your OpenRouter API key to ../.env.local or ../.env"
     echo "  cp ../.env.example ../.env.local"
     echo "  # Then edit ../.env.local and add your API key"
     echo ""
     exit 1
 fi
 
-# Check if OPENAI_API_KEY is set in the parent env file
-if ! grep -q "OPENAI_API_KEY=sk-" "$ENV_FILE"; then
-    echo "⚠️  OPENAI_API_KEY not configured in ${ENV_FILE}"
+# Check if OPENROUTER_API_KEY is set in the parent env file
+if ! grep -q "OPENROUTER_API_KEY=sk-or-v1-" "$ENV_FILE"; then
+    echo "⚠️  OPENROUTER_API_KEY not configured in ${ENV_FILE}"
     echo ""
-    echo "Please edit ${ENV_FILE} and add your OpenAI API key:" 
-    echo "  OPENAI_API_KEY=sk-your-actual-key-here"
+    echo "Please edit ${ENV_FILE} and add your OpenRouter API key:" 
+    echo "  OPENROUTER_API_KEY=sk-or-v1-your-actual-key-here"
     echo ""
     exit 1
 fi

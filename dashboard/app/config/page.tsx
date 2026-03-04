@@ -94,6 +94,9 @@ export default function ConfigPage() {
     content: string
   } | null>(null)
   const [isLoadingDocument, setIsLoadingDocument] = useState(false)
+  const [isEditingDocument, setIsEditingDocument] = useState(false)
+  const [editedDocumentContent, setEditedDocumentContent] = useState('')
+  const [isSavingDocument, setIsSavingDocument] = useState(false)
   
   // SOP State
   const [sops, setSOPs] = useState<SOP[]>([])
@@ -101,6 +104,13 @@ export default function ConfigPage() {
   const [expandedSOP, setExpandedSOP] = useState<string | null>(null)
   const [showNewSOPForm, setShowNewSOPForm] = useState(false)
   const [newSOP, setNewSOP] = useState({
+    title: '',
+    objective: '',
+    trigger: '',
+    steps: ['']
+  })
+  const [editingSOPId, setEditingSOPId] = useState<string | null>(null)
+  const [editingSOP, setEditingSOP] = useState({
     title: '',
     objective: '',
     trigger: '',
@@ -130,6 +140,22 @@ export default function ConfigPage() {
     loadSOPs()
     loadMCPConfig()
   }, [])
+
+  // Auto-save config with debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (config.websiteUrl || config.maxDepth > 0) {
+        // Auto-save config
+        fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        }).catch(error => console.error('Auto-save failed:', error))
+      }
+    }, 1000) // Wait 1 second after last change before saving
+
+    return () => clearTimeout(timer)
+  }, [config])
 
   const loadConfig = async () => {
     try {
@@ -367,12 +393,14 @@ export default function ConfigPage() {
   const handleViewDocument = async (filename: string) => {
     setIsLoadingDocument(true)
     setViewingDocument(null)
+    setIsEditingDocument(false)
     
     try {
       const response = await fetch(`/api/documents/${encodeURIComponent(filename)}`)
       if (response.ok) {
         const data = await response.json()
         setViewingDocument(data)
+        setEditedDocumentContent(data.content)
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.error || 'Failed to load document' })
@@ -384,6 +412,39 @@ export default function ConfigPage() {
       })
     } finally {
       setIsLoadingDocument(false)
+    }
+  }
+
+  const handleSaveDocumentEdit = async () => {
+    if (!viewingDocument) return
+    
+    setIsSavingDocument(true)
+    try {
+      const response = await fetch('/api/documents/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: viewingDocument.filename,
+          content: editedDocumentContent
+        })
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Document saved successfully' })
+        setIsEditingDocument(false)
+        setViewingDocument({
+          ...viewingDocument,
+          content: editedDocumentContent
+        })
+        await loadDocuments()
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.error || 'Failed to save document' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
+    } finally {
+      setIsSavingDocument(false)
     }
   }
 
@@ -472,6 +533,62 @@ export default function ConfigPage() {
       }
     } catch (error) {
       console.error('Error toggling SOP:', error)
+    }
+  }
+
+  const handleStartEditSOP = (sop: SOP) => {
+    setEditingSOPId(sop.id)
+    setEditingSOP({
+      title: sop.title,
+      objective: sop.objective,
+      trigger: sop.trigger,
+      steps: sop.steps.length > 0 ? sop.steps : ['']
+    })
+    setExpandedSOP(sop.id)
+  }
+
+  const handleCancelEditSOP = () => {
+    setEditingSOPId(null)
+    setEditingSOP({
+      title: '',
+      objective: '',
+      trigger: '',
+      steps: ['']
+    })
+  }
+
+  const handleSaveSOPEdit = async (id: string) => {
+    const steps = editingSOP.steps.map(step => step.trim()).filter(Boolean)
+
+    if (!editingSOP.title.trim() || !editingSOP.objective.trim() || !editingSOP.trigger.trim() || steps.length === 0) {
+      setMessage({ type: 'error', text: 'Please fill in all SOP fields before saving' })
+      return
+    }
+
+    try {
+      const response = await fetch('/api/sops', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          title: editingSOP.title.trim(),
+          objective: editingSOP.objective.trim(),
+          trigger: editingSOP.trigger.trim(),
+          steps
+        })
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'SOP updated successfully' })
+        handleCancelEditSOP()
+        await loadSOPs()
+        await fetch('/api/reinitialize', { method: 'POST' })
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.error || 'Failed to update SOP' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
     }
   }
 
@@ -704,14 +821,6 @@ export default function ConfigPage() {
                 >
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   {isLoading ? 'Processing...' : 'Start Scraping'}
-                </button>
-                <button
-                  onClick={handleSaveConfig}
-                  disabled={isLoading}
-                  className="px-6 py-3 bg-white border border-gray-200 text-black font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Save Config
                 </button>
               </div>
             </div>
@@ -1086,11 +1195,26 @@ export default function ConfigPage() {
                             }`} />
                           </button>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm text-gray-900 truncate">{sop.title}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm text-gray-900 truncate">{sop.title}</p>
+                              {('isDefault' in sop) && (sop as any).isDefault && (
+                                <span className="text-xs bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full font-medium">Default</span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-500 truncate mt-0.5">{sop.objective}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleStartEditSOP(sop)
+                            }}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
+                            title="Edit SOP"
+                          >
+                            <FileEdit className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -1110,23 +1234,111 @@ export default function ConfigPage() {
                       {expandedSOP === sop.id && (
                         <div className="px-4 pb-4 bg-gray-50/50">
                           <div className="ml-13 pl-10 space-y-3">
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Trigger</p>
-                              <p className="text-sm text-gray-700">{sop.trigger}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Steps</p>
-                              <ol className="space-y-2">
-                                {sop.steps.map((step, idx) => (
-                                  <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
-                                    <span className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-600 flex-shrink-0 mt-0.5">
-                                      {idx + 1}
-                                    </span>
-                                    <span>{step}</span>
-                                  </li>
-                                ))}
-                              </ol>
-                            </div>
+                            {editingSOPId === sop.id ? (
+                              <>
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Title</p>
+                                  <input
+                                    type="text"
+                                    value={editingSOP.title}
+                                    onChange={(e) => setEditingSOP({ ...editingSOP, title: e.target.value })}
+                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Objective</p>
+                                  <textarea
+                                    value={editingSOP.objective}
+                                    onChange={(e) => setEditingSOP({ ...editingSOP, objective: e.target.value })}
+                                    rows={3}
+                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                                  />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Trigger</p>
+                                  <textarea
+                                    value={editingSOP.trigger}
+                                    onChange={(e) => setEditingSOP({ ...editingSOP, trigger: e.target.value })}
+                                    rows={2}
+                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                                  />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Steps</p>
+                                  <div className="space-y-2">
+                                    {editingSOP.steps.map((step, idx) => (
+                                      <div key={idx} className="flex gap-2">
+                                        <span className="w-8 h-9 bg-gray-200 rounded-lg flex items-center justify-center text-xs font-medium text-gray-600 flex-shrink-0">
+                                          {idx + 1}
+                                        </span>
+                                        <textarea
+                                          value={step}
+                                          onChange={(e) => {
+                                            const steps = [...editingSOP.steps]
+                                            steps[idx] = e.target.value
+                                            setEditingSOP({ ...editingSOP, steps })
+                                          }}
+                                          rows={2}
+                                          className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                                        />
+                                        {editingSOP.steps.length > 1 && (
+                                          <button
+                                            onClick={() => {
+                                              const steps = editingSOP.steps.filter((_, i) => i !== idx)
+                                              setEditingSOP({ ...editingSOP, steps })
+                                            }}
+                                            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                            title="Remove step"
+                                          >
+                                            <X className="w-4 h-4" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <button
+                                    onClick={() => setEditingSOP({ ...editingSOP, steps: [...editingSOP.steps, ''] })}
+                                    className="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                                  >
+                                    + Add Step
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-2 pt-1">
+                                  <button
+                                    onClick={() => handleSaveSOPEdit(sop.id)}
+                                    className="px-3 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-all"
+                                  >
+                                    Save Changes
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEditSOP}
+                                    className="px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg text-sm transition-all"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Trigger</p>
+                                  <p className="text-sm text-gray-700">{sop.trigger}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Steps</p>
+                                  <ol className="space-y-2">
+                                    {sop.steps.map((step, idx) => (
+                                      <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
+                                        <span className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-600 flex-shrink-0 mt-0.5">
+                                          {idx + 1}
+                                        </span>
+                                        <span>{step}</span>
+                                      </li>
+                                    ))}
+                                  </ol>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1396,12 +1608,27 @@ export default function ConfigPage() {
                   {viewingDocument?.filename.replace(/^uploaded_/, '').replace(/^scraped_/, '') || 'Loading...'}
                 </h2>
               </div>
-              <button
-                onClick={() => setViewingDocument(null)}
-                className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {!isEditingDocument && viewingDocument && (
+                  <button
+                    onClick={() => setIsEditingDocument(true)}
+                    className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all flex items-center gap-1"
+                    title="Edit document"
+                  >
+                    <FileEdit className="w-4 h-4" />
+                    Edit
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setViewingDocument(null)
+                    setIsEditingDocument(false)
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Content */}
@@ -1410,6 +1637,13 @@ export default function ConfigPage() {
                 <div className="flex items-center justify-center h-64">
                   <Loader2 className="w-8 h-8 animate-spin text-gray-300" />
                 </div>
+              ) : isEditingDocument && viewingDocument ? (
+                <textarea
+                  value={editedDocumentContent}
+                  onChange={(e) => setEditedDocumentContent(e.target.value)}
+                  className="w-full h-full p-4 font-mono text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black resize-none"
+                  placeholder="Edit document content..."
+                />
               ) : viewingDocument ? (
                 <div className="prose prose-sm max-w-none">
                   <pre className="whitespace-pre-wrap font-mono text-xs bg-gray-50 p-6 rounded-lg border border-gray-200 leading-relaxed text-gray-800">
@@ -1420,13 +1654,36 @@ export default function ConfigPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-gray-100 flex justify-end">
-              <button
-                onClick={() => setViewingDocument(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-              >
-                Close
-              </button>
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-2">
+              {isEditingDocument && (
+                <>
+                  <button
+                    onClick={() => {
+                      setIsEditingDocument(false)
+                      setEditedDocumentContent(viewingDocument?.content || '')
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveDocumentEdit}
+                    disabled={isSavingDocument}
+                    className="px-4 py-2 text-sm font-medium bg-black text-white hover:bg-gray-800 disabled:opacity-50 rounded-lg transition-all flex items-center gap-2"
+                  >
+                    {isSavingDocument ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {isSavingDocument ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </>
+              )}
+              {!isEditingDocument && (
+                <button
+                  onClick={() => setViewingDocument(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
+                >
+                  Close
+                </button>
+              )}
             </div>
           </div>
         </div>

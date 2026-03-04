@@ -5,7 +5,7 @@
  * 1. Replace the content of config/company.ts with this configuration
  * 2. Update the products array with your actual products
  * 3. Add relevant documents to the documents/ folder
- * 4. Run the agent: bun run tax-support-agent.ts
+ * 4. Run the agent: bun run support-agent.ts
  */
 
 import { CompanyConfig } from '../company'

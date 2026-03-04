@@ -290,17 +290,17 @@ ${productCatalog.getProductDescription(product.id)}`
   const completion = await openai.chat.completions.create({
     model: process.env.MODEL || 'gpt-5-mini',
     messages,
-    temperature: parseFloat(process.env.TEMPERATURE || '0.7'),
+    temperature: parseFloat(process.env.TEMPERATURE || '1'),
     max_completion_tokens: parseInt(process.env.MAX_COMPLETION_TOKENS || '5000')
   })
   
   const assistantMessage = completion.choices[0].message.content || 
     generateErrorResponse(COMPANY_CONFIG)
   
-  // Add Jake greeting if first message
+  // Add Centric greeting if first message
   let finalMessage = assistantMessage
   if (isFirstMessage) {
-    finalMessage = `Hi! I'm Jake, an AI Assistant.\n${assistantMessage}\n\nIf you want to contact a human, let me know.`
+    finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you want to contact a human, let me know.`
     conversation.firstMessageShown = true
   }
   

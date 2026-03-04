@@ -43,7 +43,7 @@ cp config/examples/healthcare-config.ts config/company.ts
 
 4. **Update products** in `lib/product-catalog.ts` with your actual products
 5. **Add documents** to the `documents/` folder with your company's information
-6. **Run the agent**: `bun run tax-support-agent.ts`
+6. **Run the agent**: `bun run support-agent.ts`
 
 ### Option 2: Mix and Match
 
@@ -145,7 +145,7 @@ After setting up your configuration:
 
 1. **Test the iMessage agent**:
    ```bash
-   bun run tax-support-agent.ts
+   bun run support-agent.ts
    ```
 
 2. **Test the web dashboard**:
