@@ -4,19 +4,19 @@
  */
 
 // Configuration
-export * from './config/index.js'
+export * from './config/index.ts'
 
 // Library functions
-export * from './lib/index.js'
+export * from './lib/index.ts'
 
 // MCP Integration
-export * from './mcp/index.js'
+export * from './mcp/index.ts'
 
 // Error handling
-export * from './errors/index.js'
+export * from './errors/index.ts'
 
 // Logging
-export * from './logger/index.js'
+export * from './logger/index.ts'
 
 // Types
-export * from './types/index.js'
+export * from './types/index.ts'

@@ -17,6 +17,8 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true
+    ,
+    "rewriteRelativeImportExtensions": true
   },
   "include": [
     "**/*.ts",
