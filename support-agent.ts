@@ -47,6 +47,21 @@ if (!config.openaiApiKey) {
 const openai = new OpenAI({ apiKey: config.openaiApiKey })
 
 // ============================================================================
+// Em-Dash Sanitizer
+// ============================================================================
+
+/**
+ * Automatically replace em-dashes and en-dashes with ", " in all LLM output
+ * Ensures consistent, human-friendly text formatting without problematic punctuation
+ * Handles spaces around dashes to prevent extra whitespace (e.g., "Hi—I'm" → "Hi, I'm")
+ */
+function sanitizeEmDashes(text: string): string {
+  if (!text) return text
+  // Replace em-dash (U+2014) or en-dash (U+2013) plus surrounding spaces with a single ", "
+  return text.replace(/\s*[\u2014\u2013]\s*/g, ', ')
+}
+
+// ============================================================================
 // Initialize Components
 // ============================================================================
 
@@ -507,20 +522,20 @@ ${productCatalog.getProductDescription(product.id)}`
             completionOptions.messages = messages
         } else {
             // Got final text response
-            assistantMessage = choice.message.content || 
-                "I apologize, but I'm having trouble generating a response. Please try again."
+            assistantMessage = sanitizeEmDashes(choice.message.content || 
+                "I apologize, but I'm having trouble generating a response. Please try again.")
             break
         }
     }
     
     if (!assistantMessage) {
-        assistantMessage = "I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request."
+        assistantMessage = sanitizeEmDashes("I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request.")
     }
     
     // Add Centric greeting if first message
     let finalMessage = assistantMessage
     if (isFirstMessage) {
-        finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you'd like to speak with a human, just say so and we'll connect you.`
+        finalMessage = sanitizeEmDashes(`Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you'd like to speak with a human, just say so and we'll connect you.`)
         conversation.firstMessageShown = true
     }
     

@@ -98,6 +98,21 @@ let mcpTools: MCPTool[] = []
 let mcpEnabled = false
 let mcpInitialized = false
 
+// ============================================================================
+// Em-Dash Sanitizer
+// ============================================================================
+
+/**
+ * Automatically replace em-dashes and en-dashes with ", " in all LLM output
+ * Ensures consistent, human-friendly text formatting without problematic punctuation
+ * Handles spaces around dashes to prevent extra whitespace (e.g., "Hi—I'm" → "Hi, I'm")
+ */
+function sanitizeEmDashes(text: string): string {
+  if (!text) return text
+  // Replace em-dash (U+2014) or en-dash (U+2013) plus surrounding spaces with a single ", "
+  return text.replace(/\s*[\u2014\u2013]\s*/g, ', ')
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 8000): Promise<Response> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -263,15 +278,23 @@ async function initialize() {
     }
 
     try {
-      await vectorStore.initialize()
+      // Use a timeout to prevent worker issues from hanging forever
+      const initPromiseWithTimeout = Promise.race([
+        vectorStore.initialize(),
+        new Promise<void>((_, reject) => 
+          setTimeout(() => reject(new Error('Vector store initialization timeout')), 10000)
+        )
+      ])
+      await initPromiseWithTimeout
     } catch (error) {
-      console.warn('⚠️  Dashboard: Vector store initialization failed:', error)
+      console.warn('⚠️  Dashboard: Vector store initialization failed (non-fatal):', error instanceof Error ? error.message : error)
       // Fallback to a noop vector store so the API can still respond without docs
       vectorStore = {
         initialize: async () => {},
         search: async (_q: string, _n: number = 3) => [] as any[],
         getDocumentCount: () => 0
       } as unknown as DocumentVectorStore
+      console.log('✅ Dashboard: Using fallback vector store (no embeddings available)')
     }
 
     // Load MCP tools (non-fatal if unavailable)
@@ -353,15 +376,20 @@ function detectHumanHandoff(message: string): boolean {
 async function getRelevantContext(query: string): Promise<string> {
   if (!vectorStore) return "No context available"
   
-  const results = await vectorStore.search(query, 3)
-  
-  if (results.length === 0) {
+  try {
+    const results = await vectorStore.search(query, 3)
+    
+    if (results.length === 0) {
+      return "No specific documentation found for this query."
+    }
+    
+    return results.map((r, i) => 
+      `[Document ${i + 1}] ${r.content} (Relevance: ${(r.similarity * 100).toFixed(1)}%)`
+    ).join('\n\n')
+  } catch (error) {
+    console.warn('⚠️  Vector search failed (non-fatal):', error instanceof Error ? error.message : error)
     return "No specific documentation found for this query."
   }
-  
-  return results.map((r, i) => 
-    `[Document ${i + 1}] ${r.content} (Relevance: ${(r.similarity * 100).toFixed(1)}%)`
-  ).join('\n\n')
 }
 
 function detectProductInquiry(message: string): Product | null {
@@ -443,7 +471,21 @@ async function generateResponse(
   userMessage: string,
   history?: Array<{ role: string; content: string }>
 ): Promise<string> {
-  await waitForInitialization(6000)
+  try {
+    await waitForInitialization(6000)
+  } catch (error) {
+    console.warn('⚠️  Initialization error (continuing with fallback):', error instanceof Error ? error.message : error)
+    // Continue anyway - fallback vector store will be used
+  }
+  
+  // Make sure we have a valid vectorStore even if initialization fails
+  if (!vectorStore) {
+    vectorStore = {
+      initialize: async () => {},
+      search: async (_q: string, _n: number = 3) => [] as any[],
+      getDocumentCount: () => 0
+    } as unknown as DocumentVectorStore
+  }
   
   const conversation = getConversation(sessionId)
   
@@ -468,7 +510,7 @@ async function generateResponse(
   
   // If human handoff requested, provide appropriate response
   if (conversation.humanHandoffRequested) {
-    const handoffMessage = "I understand you'd like to speak with a human. Human handoff functionality is being set up and will be available soon. In the meantime, I'm here to help with any questions you have!"
+    const handoffMessage = sanitizeEmDashes("I understand you'd like to speak with a human. Human handoff functionality is being set up and will be available soon. In the meantime, I'm here to help with any questions you have!")
     
     conversation.messageHistory.push({
       role: 'assistant',
@@ -493,11 +535,11 @@ ${desc}`
     
     // Check for negotiation
     if (detectPriceNegotiation(userMessage) && 'negotiable' in product) {
-      const negotiationResponse = await handleNegotiation(
+      const negotiationResponse = sanitizeEmDashes(await handleNegotiation(
         conversation,
         userMessage,
         product as NegotiableProduct
-      )
+      ))
       conversation.messageHistory.push({
         role: 'assistant',
         content: negotiationResponse
@@ -508,7 +550,7 @@ ${desc}`
     // Check for purchase intent
     if (detectPurchaseIntent(userMessage)) {
       const price = conversation.currentNegotiation?.currentOffer || product.price
-      const purchaseResponse = generatePurchaseResponse(config!.company, product.name, price, config!.features.timeConstraints.responseTimeMinutes)
+      const purchaseResponse = sanitizeEmDashes(generatePurchaseResponse(config!.company, product.name, price, config!.features.timeConstraints.responseTimeMinutes))
       
       conversation.messageHistory.push({
         role: 'assistant',
@@ -605,19 +647,19 @@ ${desc}`
       completionOptions.messages = messages
     } else {
       // Got final text response
-      assistantMessage = choice.message.content || generateErrorResponse(config!.company)
+      assistantMessage = sanitizeEmDashes(choice.message.content || generateErrorResponse(config!.company))
       break
     }
   }
   
   if (!assistantMessage) {
-    assistantMessage = "I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request."
+    assistantMessage = sanitizeEmDashes("I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request.")
   }
   
   // Add Centric greeting if first message
   let finalMessage = assistantMessage
   if (isFirstMessage) {
-    finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you'd like to speak with a human, just say so and we'll connect you.`
+    finalMessage = sanitizeEmDashes(`Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you'd like to speak with a human, just say so and we'll connect you.`)
     conversation.firstMessageShown = true
   }
   
