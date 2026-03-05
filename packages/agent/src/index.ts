@@ -10,6 +10,7 @@ import {
   DocumentVectorStore,
   ProductCatalog,
   MCPManager,
+  SlackNotifier,
   generateSystemPrompt,
   generateContextPrompt,
   generateGreeting,
@@ -41,6 +42,10 @@ let config: LoadedConfig
 
 logger.info('Starting Photon Customer Support Agent v2.0')
 
+// Module-level references set during main() initialization
+let sdk: IMessageSDK
+let slackNotifier: SlackNotifier | null = null
+
 // ============================================================================
 // Conversation State Management
 // ============================================================================
@@ -52,7 +57,9 @@ function getConversation(phoneNumber: string): ConversationState {
     conversations.set(phoneNumber, {
       messageHistory: [],
       firstMessageShown: false,
-      humanHandoffRequested: false
+      humanHandoffRequested: false,
+      humanHandoffActive: false,
+      handoffCount: 0
     })
   }
   return conversations.get(phoneNumber)!
@@ -158,6 +165,34 @@ async function handleNegotiation(
   )
 }
 
+async function generateHandoffSummary(conversation: ConversationState): Promise<string> {
+  try {
+    const historyText = conversation.messageHistory
+      .map((m) => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
+      .join('\n')
+
+    const completion = await openai.chat.completions.create({
+      model: config.ai.model,
+      messages: [
+        {
+          role: 'system',
+          content: "Summarize the customer's issue in 2-3 sentences for a support agent who needs to take over the conversation."
+        },
+        {
+          role: 'user',
+          content: `Conversation:\n${historyText}`
+        }
+      ],
+      temperature: 0.3,
+      max_completion_tokens: 150
+    })
+
+    return completion.choices[0]?.message?.content || 'Customer requested human support.'
+  } catch {
+    return 'Customer requested human support.'
+  }
+}
+
 async function generateResponse(sender: string, message: string, vectorStore: DocumentVectorStore, productCatalog: ProductCatalog): Promise<string> {
   const conversation = getConversation(sender)
 
@@ -166,6 +201,21 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
     if (config.company.humanHandoff?.enabled) {
       if (detectHumanHandoff(message, config.company.humanHandoff.keywords)) {
         conversation.humanHandoffRequested = true
+
+        // Increment handoff count before posting
+        conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
+
+        // Slack integration: post handoff notification
+        if (slackNotifier) {
+          const summary = await generateHandoffSummary(conversation)
+          const threadTs = await slackNotifier.postHandoff(sender, conversation, summary)
+          if (threadTs) {
+            conversation.slackThreadTs = threadTs
+            conversation.humanHandoffActive = true
+            logger.info({ sender, threadTs }, 'Human handoff posted to Slack')
+          }
+        }
+
         return config.company.humanHandoff.message
       }
     }
@@ -205,7 +255,7 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
     }
 
     // Generate AI response
-    const systemPrompt = generateSystemPrompt(config.company, config.sops || [], config.features)
+    const systemPrompt = generateSystemPrompt(config.company, config.sops || [], config.features, sender)
     const contextPrompt = generateContextPrompt(documentContext, productContext)
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -245,7 +295,7 @@ async function main() {
   logger.info({ company: config.company.name, agentName: config.company.agentName }, 'Configuration loaded')
 
   // Initialize components
-  const sdk = new IMessageSDK({ debug: process.env.DEBUG === 'true' })
+  sdk = new IMessageSDK({ debug: process.env.DEBUG === 'true' })
   const vectorStore = new DocumentVectorStore(
     config.features.knowledgeBase.documentsPath,
     openai,
@@ -264,6 +314,41 @@ async function main() {
     await mcpManager.loadConfig(config.mcp)
   }
 
+  // Initialize Slack notifier if enabled
+  const handoffConfig = config.company.humanHandoff
+  const botToken = process.env.SLACK_BOT_TOKEN
+  const appToken = process.env.SLACK_APP_TOKEN
+  const channelId = process.env.SLACK_CHANNEL_ID || handoffConfig?.slackChannelId || ''
+
+  if (handoffConfig?.slackEnabled && botToken && appToken && channelId) {
+    slackNotifier = new SlackNotifier(botToken, appToken, channelId, {
+      onMessageForCustomer: async (sender, text) => {
+        try {
+          await sdk.send(sender, text)
+          logger.info({ sender }, 'Forwarded Slack reply to customer')
+        } catch (error) {
+          logger.error({ error, sender }, 'Failed to forward Slack reply to customer')
+        }
+      },
+      onResolve: async (sender) => {
+        const conversation = getConversation(sender)
+        conversation.humanHandoffActive = false
+        conversation.slackThreadTs = undefined
+        logger.info({ sender }, 'Human handoff resolved, AI re-enabled')
+        try {
+          await sdk.send(sender, "You're back with the AI assistant. How can I help?")
+        } catch (error) {
+          logger.error({ error, sender }, 'Failed to send resolve message to customer')
+        }
+      }
+    })
+
+    await slackNotifier.start()
+    logger.info({ channelId }, 'Slack notifier started')
+  } else if (handoffConfig?.slackEnabled) {
+    logger.warn('Slack handoff is enabled in config but SLACK_BOT_TOKEN, SLACK_APP_TOKEN, or channel ID is missing')
+  }
+
   logger.info('Agent initialized successfully')
 
   // Watch for messages
@@ -278,6 +363,14 @@ async function main() {
       logger.info({ sender }, 'Incoming message')
 
       const conversation = getConversation(sender)
+
+      // If human handoff is active, relay to Slack thread instead of generating AI response
+      if (conversation.humanHandoffActive && conversation.slackThreadTs && slackNotifier) {
+        await slackNotifier.postCustomerMessage(conversation.slackThreadTs, text)
+        logger.info({ sender }, 'Relayed customer message to Slack thread')
+        return
+      }
+
       const isFirstMessage = conversation.messageHistory.length === 0
 
       try {

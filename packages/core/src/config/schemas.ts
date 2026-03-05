@@ -49,7 +49,9 @@ export const GreetingConfigSchema = z.object({
 export const HumanHandoffConfigSchema = z.object({
   enabled: z.boolean(),
   keywords: z.array(z.string()),
-  message: z.string()
+  message: z.string(),
+  slackEnabled: z.boolean().optional(),
+  slackChannelId: z.string().optional()
 })
 
 export const CompanyConfigSchema = z.object({

@@ -3,18 +3,18 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { 
-  Globe, 
-  FileText, 
-  CloudUpload, 
-  Paperclip, 
-  Trash2, 
-  RefreshCw, 
-  Save, 
-  Upload, 
-  FileEdit, 
-  X, 
-  ArrowLeft, 
-  Loader2, 
+  Globe,
+  FileText,
+  CloudUpload,
+  Paperclip,
+  Trash2,
+  RefreshCw,
+  Save,
+  Upload,
+  FileEdit,
+  X,
+  ArrowLeft,
+  Loader2,
   FileUp,
   CheckCircle,
   AlertTriangle,
@@ -29,7 +29,10 @@ import {
   ToggleLeft,
   ToggleRight,
   Download,
-  FileDown
+  FileDown,
+  MessageSquare,
+  KeyRound,
+  Hash
 } from 'lucide-react'
 
 interface ScrapeConfig {
@@ -85,6 +88,10 @@ export default function ConfigPage() {
     maxDepth: 3,
     autoUpdateEnabled: false,
     autoUpdateIntervalMinutes: 60
+  })
+  const [autoUpdateForm, setAutoUpdateForm] = useState({
+    enabled: false,
+    intervalMinutes: 60
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingAutoUpdate, setIsSavingAutoUpdate] = useState(false)
@@ -162,6 +169,21 @@ export default function ConfigPage() {
     args: ''
   })
 
+  // Slack State
+  const [slackStatus, setSlackStatus] = useState({
+    slackEnabled: false,
+    slackChannelId: '',
+    botTokenSet: false,
+    appTokenSet: false
+  })
+  const [slackForm, setSlackForm] = useState({
+    botToken: '',
+    appToken: '',
+    channelId: ''
+  })
+  const [isSavingSlack, setIsSavingSlack] = useState(false)
+  const [isLoadingSlack, setIsLoadingSlack] = useState(false)
+
   // File input refs for import
   const sopFileInputRef = useRef<HTMLInputElement>(null)
   const mcpFileInputRef = useRef<HTMLInputElement>(null)
@@ -173,6 +195,7 @@ export default function ConfigPage() {
     loadSOPs()
     loadMCPConfig()
     loadAutoUpdateStatus()
+    loadSlackConfig()
   }, [])
 
   useEffect(() => {
@@ -194,15 +217,15 @@ export default function ConfigPage() {
     }
   }, [autoUpdateStatus?.lastRun])
 
-  // Auto-save config with debounce
+  // Auto-save config with debounce (excludes auto-update fields - those are applied only on button click)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (config.websiteUrl || config.maxDepth > 0) {
-        // Auto-save config
+        const { autoUpdateEnabled, autoUpdateIntervalMinutes, ...saveConfig } = config
         fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config)
+          body: JSON.stringify(saveConfig)
         }).catch(error => console.error('Auto-save failed:', error))
       }
     }, 1000) // Wait 1 second after last change before saving
@@ -217,6 +240,10 @@ export default function ConfigPage() {
         const data = await response.json()
         if (data.config) {
           setConfig(data.config)
+          setAutoUpdateForm({
+            enabled: data.config.autoUpdateEnabled ?? false,
+            intervalMinutes: data.config.autoUpdateIntervalMinutes ?? 60
+          })
         }
       }
     } catch (error) {
@@ -350,8 +377,8 @@ export default function ConfigPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'configure',
-          enabled: config.autoUpdateEnabled,
-          intervalMinutes: config.autoUpdateIntervalMinutes || 60
+          enabled: autoUpdateForm.enabled,
+          intervalMinutes: autoUpdateForm.intervalMinutes
         })
       })
 
@@ -1143,6 +1170,51 @@ export default function ConfigPage() {
     }
   }
 
+  // Slack Functions
+  const loadSlackConfig = async () => {
+    setIsLoadingSlack(true)
+    try {
+      const res = await fetch('/api/slack')
+      if (res.ok) {
+        const data = await res.json()
+        setSlackStatus(data)
+        setSlackForm(f => ({ ...f, channelId: data.slackChannelId }))
+      }
+    } catch (error) {
+      console.error('Error loading Slack config:', error)
+    } finally {
+      setIsLoadingSlack(false)
+    }
+  }
+
+  const handleSaveSlack = async () => {
+    setIsSavingSlack(true)
+    try {
+      const res = await fetch('/api/slack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slackEnabled: slackStatus.slackEnabled,
+          slackChannelId: slackForm.channelId,
+          botToken: slackForm.botToken || undefined,
+          appToken: slackForm.appToken || undefined
+        })
+      })
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'Slack configuration saved.' })
+        setSlackForm(f => ({ ...f, botToken: '', appToken: '' }))
+        await loadSlackConfig()
+      } else {
+        setMessage({ type: 'error', text: 'Failed to save Slack configuration.' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to save Slack configuration.' })
+      console.error(error)
+    } finally {
+      setIsSavingSlack(false)
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 text-black font-sans selection:bg-black selection:text-white">
       <div className="container mx-auto px-6 py-16 max-w-6xl">
@@ -1262,8 +1334,8 @@ export default function ConfigPage() {
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={Boolean(config.autoUpdateEnabled)}
-                      onChange={(e) => setConfig({ ...config, autoUpdateEnabled: e.target.checked })}
+                      checked={autoUpdateForm.enabled}
+                      onChange={(e) => setAutoUpdateForm(f => ({ ...f, enabled: e.target.checked }))}
                       className="sr-only peer"
                       disabled={isLoading || isSavingAutoUpdate}
                     />
@@ -1278,8 +1350,8 @@ export default function ConfigPage() {
                       type="number"
                       min={5}
                       max={1440}
-                      value={config.autoUpdateIntervalMinutes || 60}
-                      onChange={(e) => setConfig({ ...config, autoUpdateIntervalMinutes: Math.max(5, Number(e.target.value) || 60) })}
+                      value={autoUpdateForm.intervalMinutes}
+                      onChange={(e) => setAutoUpdateForm(f => ({ ...f, intervalMinutes: Math.max(5, Number(e.target.value) || 60) }))}
                       className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
                       disabled={isSavingAutoUpdate}
                     />
@@ -2114,6 +2186,147 @@ export default function ConfigPage() {
           </div>
         </div>
         
+        {/* Slack Integration Section */}
+        <div className="mt-12">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Slack Integration</h3>
+                  <p className="text-xs text-gray-500">Route human handoffs to a Slack channel</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setSlackStatus(s => ({ ...s, slackEnabled: !s.slackEnabled }))
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  slackStatus.slackEnabled
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {slackStatus.slackEnabled ? (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    Enabled
+                  </>
+                ) : (
+                  <>
+                    <div className="w-2 h-2 rounded-full bg-gray-400" />
+                    Disabled
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {isLoadingSlack ? (
+                <div className="py-8 text-center">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-300" />
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Bot Token */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Bot Token
+                        <span className="ml-1.5 text-xs font-normal text-gray-400">(xoxb-...)</span>
+                      </label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="password"
+                          value={slackForm.botToken}
+                          onChange={(e) => setSlackForm(f => ({ ...f, botToken: e.target.value }))}
+                          placeholder={slackStatus.botTokenSet ? '••••••••••••••••' : 'xoxb-...'}
+                          className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                        />
+                      </div>
+                      {slackStatus.botTokenSet && (
+                        <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Token is set
+                        </p>
+                      )}
+                    </div>
+
+                    {/* App Token */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        App Token
+                        <span className="ml-1.5 text-xs font-normal text-gray-400">(xapp-...)</span>
+                      </label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="password"
+                          value={slackForm.appToken}
+                          onChange={(e) => setSlackForm(f => ({ ...f, appToken: e.target.value }))}
+                          placeholder={slackStatus.appTokenSet ? '••••••••••••••••' : 'xapp-...'}
+                          className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                        />
+                      </div>
+                      {slackStatus.appTokenSet && (
+                        <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> Token is set
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-400">Needs <code className="bg-gray-100 px-1 rounded">connections:write</code> scope for Socket Mode</p>
+                    </div>
+                  </div>
+
+                  {/* Channel ID */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Channel ID
+                      <span className="ml-1.5 text-xs font-normal text-gray-400">(C... - right-click a channel in Slack → Copy link)</span>
+                    </label>
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={slackForm.channelId}
+                        onChange={(e) => setSlackForm(f => ({ ...f, channelId: e.target.value }))}
+                        placeholder="C0123456789"
+                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Required Permissions Note */}
+                  <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500 space-y-1">
+                    <p className="font-medium text-gray-700">Required bot token scopes</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {['chat:write', 'channels:history', 'groups:history'].map(scope => (
+                        <code key={scope} className="bg-white border border-gray-200 px-2 py-0.5 rounded text-gray-600">{scope}</code>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      onClick={handleSaveSlack}
+                      disabled={isSavingSlack}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-all"
+                    >
+                      {isSavingSlack ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      {isSavingSlack ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Footer */}
         <footer className="mt-24 pt-8 border-t border-gray-200 text-center">
           <p className="text-sm text-gray-400">

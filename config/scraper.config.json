@@ -26,7 +26,7 @@
   "includeSameOriginSubdomains": true,
   "maxDepth": 3,
   "autoUpdateEnabled": false,
-  "autoUpdateIntervalMinutes": 64,
+  "autoUpdateIntervalMinutes": 72,
   "lastScraped": "2026-03-03T21:58:30.366Z",
   "totalPages": 300
 }

@@ -51,6 +51,8 @@ export interface HumanHandoffConfig {
   enabled: boolean
   keywords: string[]
   message: string
+  slackEnabled?: boolean
+  slackChannelId?: string
 }
 
 export interface CompanyConfig extends CompanyIdentity {
@@ -209,6 +211,9 @@ export interface ConversationState {
   lastMessageTime?: Date
   firstMessageShown?: boolean
   humanHandoffRequested?: boolean
+  humanHandoffActive?: boolean
+  slackThreadTs?: string
+  handoffCount?: number
 }
 
 // ============================================================================

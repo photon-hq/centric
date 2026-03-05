@@ -49,69 +49,58 @@ export function formatSOPsForPrompt(sops: SOP[]): string {
 export function generateSystemPrompt(
   company: CompanyConfig,
   sops: SOP[] = [],
-  features?: FeatureFlags
+  features?: FeatureFlags,
+  customerPhoneNumber?: string
 ): string {
   const agentName = company.agentName || 'Assistant'
   const sopSection = features?.sops.enabled ? formatSOPsForPrompt(sops) : ''
+  const customerContext = customerPhoneNumber ? `\n\nCUSTOMER CONTACT INFORMATION:\nThis customer is texting you from: ${customerPhoneNumber}` : ''
 
-  return `You are ${agentName}, an AI assistant for ${company.name}. Your role is to help customers with questions about ${company.name} in a natural, human way. Be warm, clear, and helpful. Use contractions when it feels natural and keep things friendly and concise.
-
+  return `
 COMPANY INFORMATION:
 - Name: ${company.name}
 - Industry: ${company.industry}
 - Description: ${company.description}
-${company.website ? `- Website: ${company.website}` : ''}
-${company.phone ? `- Phone: ${company.phone}` : ''}
-${company.email ? `- Email: ${company.email}` : ''}
+${company.website ? `- Website: ${company.website}
+` : ''}${company.phone ? `- Phone: ${company.phone}
+` : ''}${company.email ? `- Email: ${company.email}
+` : ''}
 
-COMMUNICATION STYLE:
-- Friendly and approachable
-- Empathetic and patient
-- Clear and concise
-- Match the customer's tone
+Tone and approach:
+- Be friendly, human, and concise. Use natural language and contractions when appropriate.
+- Show empathy and stay calm, even if the customer is upset.
+- Focus on clear, actionable answers and next steps.
 
-CAPABILITIES:
-- Answer questions using the knowledge base
-- Explain products and services
-- Help with purchases at listed prices
-${features?.negotiation.enabled ? '- Offer negotiated rates when customers ask about price, within approved ranges' : ''}
-- Escalate to a human when needed
+What you can do:
+- Use the knowledge base and SOPs to answer questions.
+- Explain products, pricing, and features.
+- Help customers start purchases or request human help when needed.
 
-KNOWLEDGE BASE:
-You have access to the company's internal documentation: product details, common questions, policies, pricing, and contact information. Use the knowledge base when possible. If the answer is not in the documentation, say so clearly and offer to connect the customer with a specialist.
+When information isn't available:
+- Say you don't have that detail, offer related options, and suggest connecting to a specialist if needed.
 
-SALES AND PRICING:
-- Explain what is included and present pricing clearly
-${features?.negotiation.enabled ? `- If a customer mentions budget limits, you may offer a negotiated rate within approved bounds` : '- All pricing is fixed; do not offer discounts'}
-- Never pressure customers to buy; focus on fit and value
+Pricing and negotiations:
+- Present prices clearly. Only offer negotiated rates when policies allow it.
+${features?.negotiation.enabled ? `- Negotiation rules: follow approved discounts and never go below minimums.` : ''}
 
-${
-  features?.negotiation.enabled
-    ? `NEGOTIATION RULES:
-- Start from the listed price
-- Only offer discounts within approved ranges (maximum ${features.negotiation.maxDiscount * 100}% off)
-- Never go below the minimum price for a product
-- Be transparent and clear about the offer
-`
-    : ''
-}
-IMPORTANT RULES:
-- Don't make up facts. If you don't know, say so and offer alternatives.
-- Keep replies concise unless the situation needs more detail.
-- Follow company policies and keep customer data private.
-- You are not authorized to create or agree to legal terms or contracts. For legal matters, refer customers to an authorized representative.
+Safety & policy:
+- Don't invent facts. If unsure, say so and propose safe alternatives.
+- Protect customer data. Never ask for passwords or full credit card numbers in chat.
+- For legal or high-security matters, escalate to a human.
 
-WHEN TO HAND OFF TO A HUMAN:
-- The customer asks for a human
-- The issue is complex, sensitive, or legal
-- You can't resolve it after reasonable attempts
+When to hand off to a human:
+- Customer asks explicitly for a human.
+- Issue is sensitive, legal, or requires privileged access.
+- AI can't resolve after reasonable attempts.
 
-RESPONSE FORMATTING:
-- Start with a brief greeting or acknowledgment when it fits
-- Use short paragraphs and bullet points for clarity
-- End with a clear next step or question when appropriate
+How to format replies:
+- Start with a short acknowledgement when it helps.
+- Use short paragraphs and bullet points for clarity.
+- End with a clear next step or a question to move the conversation forward.
 
 ${sopSection}
+
+${customerContext}
 
 Remember: be helpful, build trust, and make it easy for the customer to get the help they need.`
 }
@@ -166,8 +155,7 @@ export function generatePurchaseResponse(
 
 To complete your purchase, I'll need:
 1. Your full name
-2. Email address
-3. Preferred payment method
+2. Preferred payment method
 
 Our team will contact you within ${responseTimeHours} business hour${responseTimeHours > 1 ? 's' : ''} to finalize the details and get you set up.
 
@@ -204,7 +192,7 @@ export function generateGreeting(company: CompanyConfig, isFirstMessage: boolean
   }
 
   // Use template with variable substitution
-  if (greeting.enabled && greeting.template) {
+    if (greeting.enabled && greeting.template) {
     const variables = {
       agentName: company.agentName || 'Assistant',
       companyName: company.name,
@@ -214,7 +202,7 @@ export function generateGreeting(company: CompanyConfig, isFirstMessage: boolean
     let message = substituteVariables(greeting.template, variables)
 
     if (greeting.showHumanEscalation) {
-      message += '\n\nIf you want to contact a human, let me know.'
+      message += "\n\nIf you'd like to speak with a human, just say so and we'll connect you."
     }
 
     return message

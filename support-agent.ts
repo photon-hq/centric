@@ -520,7 +520,7 @@ ${productCatalog.getProductDescription(product.id)}`
     // Add Centric greeting if first message
     let finalMessage = assistantMessage
     if (isFirstMessage) {
-        finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you want to contact a human, let me know.`
+        finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you'd like to speak with a human, just say so and we'll connect you.`
         conversation.firstMessageShown = true
     }
     

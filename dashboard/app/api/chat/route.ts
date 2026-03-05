@@ -262,7 +262,17 @@ async function initialize() {
       productCatalog = new ProductCatalog(config.products)
     }
 
-    await vectorStore.initialize()
+    try {
+      await vectorStore.initialize()
+    } catch (error) {
+      console.warn('⚠️  Dashboard: Vector store initialization failed:', error)
+      // Fallback to a noop vector store so the API can still respond without docs
+      vectorStore = {
+        initialize: async () => {},
+        search: async (_q: string, _n: number = 3) => [] as any[],
+        getDocumentCount: () => 0
+      } as unknown as DocumentVectorStore
+    }
 
     // Load MCP tools (non-fatal if unavailable)
     await loadMCPConfig()
@@ -607,7 +617,7 @@ ${desc}`
   // Add Centric greeting if first message
   let finalMessage = assistantMessage
   if (isFirstMessage) {
-    finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you want to contact a human, let me know.`
+    finalMessage = `Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you'd like to speak with a human, just say so and we'll connect you.`
     conversation.firstMessageShown = true
   }
   

@@ -21,6 +21,7 @@
     "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
+    "@slack/bolt": "^4.0.0",
     "openai": "^4.77.0",
     "zod": "^3.23.8",
     "pino": "^9.0.0",
