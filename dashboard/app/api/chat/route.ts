@@ -497,11 +497,15 @@ async function generateResponse(
     conversation.messageHistory.push({ role: 'assistant', content: handoffMsg })
 
     if (slackNotifier) {
-      const summary = await generateHandoffSummary(conversation)
-      const threadTs = await slackNotifier.postHandoff(sessionId, conversation, summary)
-      if (threadTs) {
-        conversation.slackThreadTs = threadTs
-        conversation.humanHandoffActive = true
+      try {
+        const summary = await generateHandoffSummary(conversation)
+        const threadTs = await slackNotifier.postHandoff(sessionId, conversation, summary)
+        if (threadTs) {
+          conversation.slackThreadTs = threadTs
+          conversation.humanHandoffActive = true
+        }
+      } catch (err: any) {
+        console.error('⚠️  Dashboard: Failed to post handoff to Slack:', err?.data?.error || err?.message || err)
       }
     }
 

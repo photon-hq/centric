@@ -115,9 +115,11 @@ export class SlackNotifier {
         this.threadMap.set(result.ts, sender)
         return result.ts
       }
+      console.error('[SlackNotifier] postHandoff: message posted but no ts returned', result)
       return null
-    } catch (error) {
-      return null
+    } catch (error: any) {
+      console.error('[SlackNotifier] postHandoff failed:', error?.data?.error || error?.message || error)
+      throw error
     }
   }
 

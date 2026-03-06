@@ -328,13 +328,17 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
 
         // Slack integration: post handoff notification
         if (slackNotifier) {
-          const summary = await generateHandoffSummary(conversation)
-          const threadTs = await slackNotifier.postHandoff(sender, conversation, summary)
-          if (threadTs) {
-            conversation.slackThreadTs = threadTs
-            conversation.humanHandoffActive = true
-            conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
-            logger.info({ sender, threadTs }, 'Human handoff posted to Slack')
+          try {
+            const summary = await generateHandoffSummary(conversation)
+            const threadTs = await slackNotifier.postHandoff(sender, conversation, summary)
+            if (threadTs) {
+              conversation.slackThreadTs = threadTs
+              conversation.humanHandoffActive = true
+              conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
+              logger.info({ sender, threadTs }, 'Human handoff posted to Slack')
+            }
+          } catch (err: any) {
+            logger.error({ error: err?.data?.error || err?.message }, 'Failed to post handoff to Slack')
           }
         }
 
