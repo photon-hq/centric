@@ -53,7 +53,7 @@ const openai = new OpenAI({ apiKey: config.openaiApiKey })
 /**
  * Automatically replace em-dashes and en-dashes with ", " in all LLM output
  * Ensures consistent, human-friendly text formatting without problematic punctuation
- * Handles spaces around dashes to prevent extra whitespace (e.g., "Hi—I'm" → "Hi, I'm")
+ * Handles spaces around dashes to prevent extra whitespace (e.g., "Hi, I'm" → "Hi, I'm")
  */
 function sanitizeEmDashes(text: string): string {
   if (!text) return text

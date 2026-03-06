@@ -430,7 +430,7 @@ export default function ConfigPage() {
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'All scraped documents cleared' })
-        await loadConfig()
+        await Promise.all([loadConfig(), loadDocuments()])
       } else {
         setMessage({ type: 'error', text: 'Failed to clear documents' })
       }

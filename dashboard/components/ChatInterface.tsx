@@ -7,9 +7,8 @@ import {
   DollarSign, 
   Rocket, 
   Gift, 
-  Send, 
-  RotateCcw,
-  Bot
+  Send,
+  RotateCcw
 } from 'lucide-react'
 
 import PhotonLogo from './PhotonLogo'
@@ -20,10 +19,13 @@ interface Message {
   timestamp: Date
 }
 
+const DEFAULT_TEST_PHONE = '+1 (555) 000-0001'
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [senderPhone, setSenderPhone] = useState(DEFAULT_TEST_PHONE)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const isUserNearBottomRef = useRef<boolean>(true)
@@ -83,7 +85,8 @@ export default function ChatInterface() {
         },
         body: JSON.stringify({
           message: input,
-          history: messages.slice(-10) // Send last 10 messages for context
+          history: messages.slice(-10),
+          senderPhone
         }),
       })
 
@@ -130,17 +133,24 @@ export default function ChatInterface() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setMessages([{
-              role: 'assistant',
-              content: COMPANY_CONFIG.greeting,
-              timestamp: new Date()
-            }])}
-            className="text-xs text-gray-400 hover:text-black transition-colors flex items-center gap-1"
-          >
-            <RotateCcw className="w-3 h-3" />
-            Clear Chat
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-gray-400">From:</span>
+              <input
+                type="text"
+                value={senderPhone}
+                onChange={(e) => setSenderPhone(e.target.value)}
+                className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 w-36 focus:outline-none focus:ring-1 focus:ring-gray-300"
+              />
+            </div>
+            <button
+              onClick={() => setMessages([])}
+              className="text-xs text-gray-400 hover:text-black transition-colors flex items-center gap-1"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Clear Chat
+            </button>
+          </div>
         </div>
       </div>
 

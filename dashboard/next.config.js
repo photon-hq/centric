@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['openai']
+    serverComponentsExternalPackages: ['openai', 'pino', 'pino-pretty', '@photon/core']
   }
 }
 

@@ -37,10 +37,23 @@ function isSameOriginOrSubdomain(baseUrl: string, targetUrl: string, includeSame
     const base = new URL(baseUrl)
     const target = new URL(targetUrl)
 
+    // Path-prefix scoping: if the base URL has a path beyond '/', only allow
+    // URLs whose path starts with that same prefix (e.g. github.com/org should
+    // not bleed into github.com/other-org).
+    if (base.pathname !== '/') {
+      const basePath = base.pathname.endsWith('/') ? base.pathname : base.pathname + '/'
+      const targetPath = target.pathname.endsWith('/') ? target.pathname : target.pathname + '/'
+      if (!targetPath.startsWith(basePath)) {
+        return false
+      }
+    }
+
+    // Exact hostname match is always allowed (same site, no subdomains involved)
     if (base.hostname === target.hostname) {
       return true
     }
 
+    // Subdomain match only when explicitly enabled
     if (includeSameOriginSubdomains) {
       const baseParts = base.hostname.split('.')
       const targetParts = target.hostname.split('.')

@@ -105,7 +105,7 @@ let mcpInitialized = false
 /**
  * Automatically replace em-dashes and en-dashes with ", " in all LLM output
  * Ensures consistent, human-friendly text formatting without problematic punctuation
- * Handles spaces around dashes to prevent extra whitespace (e.g., "Hi—I'm" → "Hi, I'm")
+ * Handles spaces around dashes to prevent extra whitespace (e.g., "Hi, I'm" → "Hi, I'm")
  */
 function sanitizeEmDashes(text: string): string {
   if (!text) return text
@@ -279,9 +279,13 @@ async function initialize() {
 
     try {
       // Use a timeout to prevent worker issues from hanging forever
+      // Attach .catch() to the init promise before racing so that if the timeout
+      // wins and the worker later crashes, the rejection doesn't become an uncaughtException
+      const vsInit = vectorStore.initialize()
+      vsInit.catch(() => {})
       const initPromiseWithTimeout = Promise.race([
-        vectorStore.initialize(),
-        new Promise<void>((_, reject) => 
+        vsInit,
+        new Promise<void>((_, reject) =>
           setTimeout(() => reject(new Error('Vector store initialization timeout')), 10000)
         )
       ])
@@ -345,19 +349,38 @@ interface ConversationState {
   }
   firstMessageShown: boolean
   humanHandoffRequested: boolean
+  ticketClosed: boolean
+  ticketId: string
 }
 
 const conversations = new Map<string, ConversationState>()
 
+function newTicketState(): ConversationState {
+  return {
+    messageHistory: [],
+    firstMessageShown: false,
+    humanHandoffRequested: false,
+    ticketClosed: false,
+    ticketId: crypto.randomUUID()
+  }
+}
+
 function getConversation(sessionId: string): ConversationState {
   if (!conversations.has(sessionId)) {
-    conversations.set(sessionId, {
-      messageHistory: [],
-      firstMessageShown: false,
-      humanHandoffRequested: false
-    })
+    conversations.set(sessionId, newTicketState())
   }
   return conversations.get(sessionId)!
+}
+
+function detectTicketClose(message: string): boolean {
+  const lower = message.toLowerCase()
+  const closePhrases = [
+    'close ticket', 'close the ticket', 'close this ticket',
+    'resolve ticket', 'mark resolved', 'that\'s all', "that's all",
+    'no more questions', 'nothing else', 'all done', 'all good',
+    'thanks, goodbye', 'thank you, goodbye', 'bye', 'goodbye'
+  ]
+  return closePhrases.some(phrase => lower.includes(phrase))
 }
 
 function detectHumanHandoff(message: string): boolean {
@@ -469,7 +492,8 @@ async function handleNegotiation(
 async function generateResponse(
   sessionId: string,
   userMessage: string,
-  history?: Array<{ role: string; content: string }>
+  history?: Array<{ role: string; content: string }>,
+  senderPhone?: string
 ): Promise<string> {
   try {
     await waitForInitialization(6000)
@@ -487,11 +511,26 @@ async function generateResponse(
     } as unknown as DocumentVectorStore
   }
   
-  const conversation = getConversation(sessionId)
-  
+  let conversation = getConversation(sessionId)
+
+  // If the previous ticket was closed, open a fresh one
+  if (conversation.ticketClosed) {
+    const fresh = newTicketState()
+    conversations.set(sessionId, fresh)
+    conversation = fresh
+  }
+
   // Check if this is the first message
   const isFirstMessage = conversation.messageHistory.length === 0 && !conversation.firstMessageShown
-  
+
+  // Detect explicit ticket-close intent
+  if (detectTicketClose(userMessage)) {
+    conversation.ticketClosed = true
+    const closeMsg = sanitizeEmDashes("Got it ,  I've closed this ticket. If you need anything else in the future, feel free to message again and we'll open a new one. Take care!")
+    conversation.messageHistory.push({ role: 'assistant', content: closeMsg })
+    return closeMsg
+  }
+
   // Check for human handoff request
   if (detectHumanHandoff(userMessage)) {
     conversation.humanHandoffRequested = true
@@ -567,8 +606,8 @@ ${desc}`
   const contextPrompt = generateContextPrompt(documentContext, productContext)
   
   // Generate system prompt from config
-  const systemPrompt = generateSystemPrompt(config!.company, config!.sops || [], config!.features)
-  
+  const systemPrompt = generateSystemPrompt(config!.company, config!.sops || [], config!.features, senderPhone, mcpEnabled && mcpTools.length > 0)
+
   // Generate AI response with MCP tool support
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
@@ -656,24 +695,23 @@ ${desc}`
     assistantMessage = sanitizeEmDashes("I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request.")
   }
   
-  // Add Centric greeting if first message
-  let finalMessage = assistantMessage
   if (isFirstMessage) {
-    finalMessage = sanitizeEmDashes(`Hi! I'm Centric, an AI Assistant.\n${assistantMessage}\n\nIf you'd like to speak with a human, just say so and we'll connect you.`)
     conversation.firstMessageShown = true
   }
-  
+
+  const finalMessage = sanitizeEmDashes(assistantMessage)
+
   conversation.messageHistory.push({
     role: 'assistant',
     content: finalMessage
   })
-  
+
   return finalMessage
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, history } = await request.json()
+    const { message, history, senderPhone } = await request.json()
     
     if (!message) {
       return NextResponse.json(
@@ -685,7 +723,7 @@ export async function POST(request: NextRequest) {
     // Use a session ID (in production, use actual session management)
     const sessionId = request.headers.get('x-session-id') || 'default'
     
-    const response = await generateResponse(sessionId, message, history)
+    const response = await generateResponse(sessionId, message, history, senderPhone)
     
     return NextResponse.json({ response })
     

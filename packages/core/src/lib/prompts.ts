@@ -50,11 +50,18 @@ export function generateSystemPrompt(
   company: CompanyConfig,
   sops: SOP[] = [],
   features?: FeatureFlags,
-  customerPhoneNumber?: string
+  customerPhoneNumber?: string,
+  hasMCPTools: boolean = false
 ): string {
   const agentName = company.agentName || 'Assistant'
   const sopSection = features?.sops.enabled ? formatSOPsForPrompt(sops) : ''
-  const customerContext = customerPhoneNumber ? `\n\nCUSTOMER CONTACT INFORMATION:\nThis customer is texting you from: ${customerPhoneNumber}` : ''
+  const customerContext = customerPhoneNumber
+    ? `\n\nCUSTOMER CONTACT INFORMATION:\nThis customer is contacting you via iMessage from: ${customerPhoneNumber}\nDo NOT ask them for their phone number ,  you already have it. Never request contact information you already know.`
+    : ''
+
+  const toolCapabilities = hasMCPTools
+    ? '- Use available tools to look up account or order information when needed.'
+    : '- You do NOT have access to any account systems, databases, or customer records. Do not claim or imply that you can look anything up.'
 
   return `
 COMPANY INFORMATION:
@@ -70,11 +77,13 @@ Tone and approach:
 - Be friendly, human, and concise. Use natural language and contractions when appropriate.
 - Show empathy and stay calm, even if the customer is upset.
 - Focus on clear, actionable answers and next steps.
+${sopSection ? '- Follow the greeting procedure defined in the SOPs if one is present.' : '- Do NOT open with a self-introduction or greeting. Jump directly into answering the customer\'s question.'}
 
 What you can do:
 - Use the knowledge base and SOPs to answer questions.
 - Explain products, pricing, and features.
 - Help customers start purchases or request human help when needed.
+${toolCapabilities}
 
 When information isn't available:
 - Say you don't have that detail, offer related options, and suggest connecting to a specialist if needed.
@@ -97,6 +106,11 @@ How to format replies:
 - Start with a short acknowledgement when it helps.
 - Use short paragraphs and bullet points for clarity.
 - End with a clear next step or a question to move the conversation forward.
+
+Ticket lifecycle:
+- When the customer's issue appears fully resolved, ask if they'd like to close the ticket or if there's anything else you can help with.
+- If they confirm they're done (e.g. "that's all", "close ticket", "goodbye"), close the ticket with a brief farewell.
+- Each new conversation after a closed ticket is a fresh ticket.
 
 ${sopSection}
 

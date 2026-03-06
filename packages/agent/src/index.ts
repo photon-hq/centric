@@ -255,7 +255,7 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
     }
 
     // Generate AI response
-    const systemPrompt = generateSystemPrompt(config.company, config.sops || [], config.features, sender)
+    const systemPrompt = generateSystemPrompt(config.company, config.sops || [], config.features, sender, mcpManager.getTools().length > 0)
     const contextPrompt = generateContextPrompt(documentContext, productContext)
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [

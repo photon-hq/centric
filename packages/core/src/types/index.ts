@@ -214,6 +214,8 @@ export interface ConversationState {
   humanHandoffActive?: boolean
   slackThreadTs?: string
   handoffCount?: number
+  ticketClosed?: boolean
+  ticketId?: string
 }
 
 // ============================================================================
