@@ -11,6 +11,7 @@ An AI-powered customer support platform built for iMessage. Responds to customer
 - **Responds to iMessages** from customers, automatically, 24/7
 - **Web chat dashboard** for testing and configuration without a Mac or iMessage
 - **RAG knowledge base** ,  scrapes your website or accepts uploaded documents; AI answers from your content
+- **Intelligent multi-query search** ,  automatically expands comparison, compound, catalog, and follow-up queries into multiple targeted searches so the AI always finds the right documents
 - **Product catalog** with fixed and negotiable pricing; handles discounts within configured limits
 - **Standard Operating Procedures (SOPs)** ,  inject step-by-step instructions the AI follows for specific scenarios
 - **MCP tool integration** ,  connect external APIs (order systems, CRMs, databases) so the AI can look things up in real time
@@ -374,6 +375,67 @@ Upload files directly from the **Config → Upload Documents** section:
 Drop `.txt` or `.md` files directly into the `documents/` folder. The agent picks them up automatically on next start or re-initialization.
 
 Files prefixed with `scraped_` are managed by the scraper. All other files are preserved when scraping is cleared.
+
+---
+
+## Intelligent Query Handling
+
+The RAG pipeline automatically detects four query patterns and adjusts the search strategy accordingly. This works for any knowledge base ,  no configuration required.
+
+### Comparison queries
+Triggered by: `X vs Y`, `X versus Y`, `difference between X and Y`, `compare X and Y`
+
+Runs independent searches for each term, then merges and deduplicates results. This ensures both sides of a comparison appear in context even when one document scores lower overall.
+
+```
+"what's the difference between the Basic and Pro plans?"
+→ searches: ["difference between Basic and Pro plans", "Basic plan", "Pro plan"]
+```
+
+### Compound questions
+Triggered by: two independent clauses joined by "and" (both sides contain a verb)
+
+Splits the question and searches each half separately, then merges results.
+
+```
+"how do I install the SDK and what are the system requirements?"
+→ searches: ["how do I install the SDK and...", "how do I install the SDK", "what are the system requirements"]
+```
+
+### Catalog / listing queries
+Triggered by: "what do you offer", "list all products", "full catalog", "what tools are available", etc.
+
+Widens the search: returns up to `maxResults × 3` chunks (minimum 20) at a lower similarity threshold (0.2) so the LLM sees a broad cross-section of your entire knowledge base.
+
+```
+"what services does your company offer?"
+→ broad search: topK=20, threshold=0.2
+```
+
+### Follow-up / context queries
+Triggered by: short vague messages (≤12 words) starting with "what", "how", "tell", "can", "does", etc. that don't contain action verbs like "install" or "configure"
+
+Automatically prepends product/topic names from the last AI response to enrich the search query.
+
+```
+[After discussing "Pro Plan"]
+"what about the pricing for that?"
+→ searches: "Pro Plan what about the pricing for that?"
+```
+
+### Tuning
+
+All search parameters are in `config/features.json`:
+
+```json
+"knowledgeBase": {
+  "maxResults": 7,
+  "similarityThreshold": 0.4
+}
+```
+
+- `maxResults` ,  chunks returned per normal query; catalog queries use `maxResults × 3` (min 20)
+- `similarityThreshold` ,  minimum cosine similarity (0, 1). Lower = broader recall, higher = stricter relevance. 0.4 works well for large technical docs.
 
 ---
 

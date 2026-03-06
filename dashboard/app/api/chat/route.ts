@@ -14,6 +14,9 @@ import {
   generateFixedPriceResponse,
   generateErrorResponse,
   sanitizeEmDashes,
+  buildSearchQueries,
+  isCatalogQuery,
+  isVagueFollowUp,
   MCPManager,
   ConfigLoader,
   type LoadedConfig
@@ -273,19 +276,39 @@ async function generateHandoffSummary(conversation: ConversationState): Promise<
   }
 }
 
-async function getRelevantContext(query: string): Promise<string> {
+async function getRelevantContext(query: string, recentTopics: string[] = []): Promise<string> {
   if (!vectorStore) return "No context available"
-  
+
   try {
-    const results = await vectorStore.search(query, 3, config?.features.knowledgeBase.similarityThreshold ?? 0)
-    
+    const maxResults = config?.features.knowledgeBase.maxResults ?? 7
+    const threshold = config?.features.knowledgeBase.similarityThreshold ?? 0
+
+    const effectiveQuery =
+      isVagueFollowUp(query) && recentTopics.length > 0
+        ? `${recentTopics.join(' ')} ${query}`
+        : query
+
+    let results
+
+    if (isCatalogQuery(effectiveQuery)) {
+      results = await vectorStore.search(effectiveQuery, Math.max(maxResults * 3, 20), Math.min(threshold, 0.2))
+    } else {
+      const queries = buildSearchQueries(effectiveQuery)
+      results =
+        queries.length > 1
+          ? await vectorStore.searchMulti(queries, maxResults, threshold)
+          : await vectorStore.search(effectiveQuery, maxResults, threshold)
+    }
+
     if (results.length === 0) {
       return "No specific documentation found for this query."
     }
-    
-    return results.map((r, i) => 
-      `[Document ${i + 1}] ${r.content} (Relevance: ${(r.similarity * 100).toFixed(1)}%)`
-    ).join('\n\n')
+
+    const limit = isCatalogQuery(effectiveQuery) ? Math.max(maxResults * 3, 20) : maxResults
+    return results
+      .slice(0, limit)
+      .map((r, i) => `[Document ${i + 1}] ${r.content} (Relevance: ${(r.similarity * 100).toFixed(1)}%)`)
+      .join('\n\n')
   } catch (error) {
     console.warn('⚠️  Vector search failed (non-fatal):', error instanceof Error ? error.message : error)
     return "No specific documentation found for this query."
@@ -294,16 +317,27 @@ async function getRelevantContext(query: string): Promise<string> {
 
 function detectProductInquiry(message: string): Product | null {
   if (!productCatalog) return null
-  
+
+  const msg = message.toLowerCase()
   const products = productCatalog.getAllProducts()
-  
+
   for (const product of products) {
     const keywords = [product.name.toLowerCase(), product.id, ...product.keywords]
-    if (keywords.some(keyword => message.toLowerCase().includes(keyword))) {
+    for (const keyword of keywords) {
+      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const wordBoundary = new RegExp(`\\b${escaped}\\b`, 'i')
+      if (!wordBoundary.test(msg)) continue
+
+      const negationPattern = new RegExp(
+        `\\b(no|not|don'?t|never|without|except|instead of|cancel|stop|avoid|skip|remove)\\b.{0,40}\\b${escaped}\\b`,
+        'i'
+      )
+      if (negationPattern.test(msg)) continue
+
       return product
     }
   }
-  
+
   return null
 }
 
@@ -335,29 +369,44 @@ async function handleNegotiation(
   message: string,
   product: NegotiableProduct
 ): Promise<string> {
-  if (!product.negotiable) {
-    return generateFixedPriceResponse(product.name, product.price)
-  }
+  const existing = conversation.currentNegotiation
+  const isCounterOffer = existing?.productId === product.id
 
-  if (!conversation.currentNegotiation) {
-    conversation.currentNegotiation = {
-      productId: product.id,
-      currentOffer: product.price,
-      negotiationRound: 1
+  if (isCounterOffer && existing) {
+    existing.negotiationRound = (existing.negotiationRound ?? 1) + 1
+
+    // Round 2: offer the floor price if it's better than the current offer
+    if (existing.negotiationRound === 2 && existing.currentOffer > product.lowestNegotiationPrice) {
+      existing.currentOffer = product.lowestNegotiationPrice
+      const floorDiscount = Math.round(((product.price - product.lowestNegotiationPrice) / product.price) * 100)
+      return generateNegotiationResponse(
+        product.name,
+        product.price,
+        product.lowestNegotiationPrice,
+        product.features,
+        floorDiscount,
+        config!.features.timeConstraints.offerValidityHours
+      )
     }
+
+    // Round 3+: hold firm ,  this is our absolute best price
+    return generateFixedPriceResponse(product.name, existing.currentOffer)
   }
 
-  const negotiation = conversation.currentNegotiation
-
+  // First negotiation attempt
   const discountPercentage = config!.features.negotiation.defaultDiscount
   const offeredPrice = Math.max(
     product.lowestNegotiationPrice,
     Math.round(product.price * (1 - discountPercentage))
   )
 
-  negotiation.currentOffer = offeredPrice
-  const discountPercent = Math.round(((product.price - offeredPrice) / product.price) * 100)
+  conversation.currentNegotiation = {
+    productId: product.id,
+    currentOffer: offeredPrice,
+    negotiationRound: 1
+  }
 
+  const discountPercent = Math.round(((product.price - offeredPrice) / product.price) * 100)
   return generateNegotiationResponse(
     product.name,
     product.price,
@@ -488,8 +537,14 @@ ${desc}`
     }
   }
   
+  // Extract product/topic names from last assistant message for follow-up query enrichment
+  const lastAssistantMsg = [...conversation.messageHistory].reverse().find((m) => m.role === 'assistant')?.content ?? ''
+  const recentTopics = productCatalog
+    ? productCatalog.getAllProducts().map((p) => p.name).filter((name) => lastAssistantMsg.toLowerCase().includes(name.toLowerCase()))
+    : []
+
   // Get relevant documents
-  const documentContext = await getRelevantContext(userMessage)
+  const documentContext = await getRelevantContext(userMessage, recentTopics)
   
   // Build context
   const contextPrompt = generateContextPrompt(documentContext, productContext)
@@ -580,7 +635,8 @@ ${desc}`
       completionOptions.messages = messages
     } else {
       // Got final text response
-      assistantMessage = sanitizeEmDashes(choice.message.content || generateErrorResponse(config!.company))
+      const content = (choice.message.content ?? '').trim()
+      assistantMessage = sanitizeEmDashes(content || generateErrorResponse(config!.company))
       break
     }
   }

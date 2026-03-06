@@ -11,6 +11,92 @@ import type { Document, SearchResult, EmbeddedDocument } from '../types/index.js
 import { VectorStoreError } from '../errors/index.js'
 import { logger } from '../logger/index.js'
 
+/**
+ * Returns true if the query is asking for a broad catalog/listing of all products or services.
+ * Used to widen the search (higher topK, lower threshold) so the LLM sees a full cross-section.
+ */
+export function isCatalogQuery(query: string): boolean {
+  return (
+    /\b(all|every|full|complete)\b.{0,30}(product|tool|service|offer|kit|sdk|package|plan|feature)/i.test(query) ||
+    /what.{0,20}(do you|does .{1,30}|you all).{0,20}(offer|have|make|sell|build|provide)/i.test(query) ||
+    /what.{0,20}(product|tool|service|kit|sdk|package|plan)s?\b.{0,30}(available|offer|have|support)/i.test(query) ||
+    /list.{0,20}(product|tool|service|kit|sdk|package|plan|offer|feature)/i.test(query) ||
+    /\b(catalog|catalogue|lineup|portfolio|suite|offerings)\b/i.test(query) ||
+    // Common ways users ask for everything available
+    /what (do you|can i|are my) (have|get|buy|choose|pick|order)/i.test(query) ||
+    /what('?s| is) (available|on offer)/i.test(query) ||
+    /\bshow me (everything|all|your products|your services|what you have)/i.test(query) ||
+    /\b(pricing overview|price list|full pricing|all pricing|all plans)\b/i.test(query) ||
+    /what are (my |the |your )?(options|choices|plans|packages|tiers)/i.test(query)
+  )
+}
+
+/**
+ * Returns true if the query is a short vague follow-up that references prior context.
+ * Examples: "what about pricing?", "and the advanced version?", "tell me more", "can it also X?"
+ */
+export function isVagueFollowUp(query: string): boolean {
+  // Raised from 12 to 20 ,  longer follow-ups like "what about the pricing on that one?" still need context
+  if (query.trim().split(/\s+/).length > 20) return false
+  return (
+    /^(what|how|tell|can|does|is|are|do|and|but|what about|how about|any|does it|can it)\b/i.test(query.trim()) &&
+    !/\b(install|setup|configure|create|build|deploy|integrate|difference|compare|vs)\b/i.test(query)
+  )
+}
+
+/**
+ * Returns true if two matched halves of an "and" split look like they are joining two
+ * independent clauses (compound question) rather than two nouns in a comparison.
+ * Heuristic: a clause has a verb; a noun phrase generally does not.
+ */
+function hasVerb(text: string): boolean {
+  return /\b(is|are|do|does|can|how|what|install|get|set|use|work|support|run|build|create|configure|need|want|have|find)\b/i.test(text)
+}
+
+/**
+ * Parse a user query into multiple sub-queries.
+ *
+ * Handles three patterns:
+ * 1. Comparison  ,  "X vs Y", "difference between X and Y", "compare X and Y"
+ *    → returns [original, X, Y]
+ * 2. Compound question ,  "how do I install X and what are the requirements?"
+ *    → returns [original, half1, half2]
+ * 3. Everything else ,  returns [original]
+ */
+export function buildSearchQueries(query: string): string[] {
+  // 1. Comparison patterns (checked first, before compound split)
+  const comparisonPatterns = [
+    /\bdifferences?\s+between\s+(.+?)\s+and\s+(.+)/i,
+    /\bcompare\s+(.+?)\s+(?:and|to|vs\.?|versus)\s+(.+)/i,
+    /(.+?)\s+vs\.?\s+(.+)/i,
+    /(.+?)\s+versus\s+(.+)/i,
+  ]
+
+  for (const pattern of comparisonPatterns) {
+    const match = query.match(pattern)
+    if (match) {
+      const a = match[1].trim()
+      const b = match[2].trim()
+      if (a.length > 2 && b.length > 2) {
+        return [...new Set([query, a, b])]
+      }
+    }
+  }
+
+  // 2. Compound question: two independent clauses joined by " and "
+  // Only split when both halves look like independent questions/clauses (contain a verb)
+  const andMatch = query.match(/^(.{8,}?)\s+and\s+(.{8,})$/i)
+  if (andMatch) {
+    const a = andMatch[1].trim()
+    const b = andMatch[2].trim()
+    if (hasVerb(a) && hasVerb(b)) {
+      return [...new Set([query, a, b])]
+    }
+  }
+
+  return [query]
+}
+
 export class DocumentVectorStore {
   private documents: EmbeddedDocument[] = []
   private documentsPath: string
@@ -273,6 +359,30 @@ export class DocumentVectorStore {
 
     const filtered = minSimilarity > 0 ? results.filter((r) => r.similarity >= minSimilarity) : results
     return filtered.slice(0, topK)
+  }
+
+  /**
+   * Search using multiple queries and merge results, deduplicating by chunk.
+   * Useful for comparison queries where multiple topics need independent coverage.
+   */
+  async searchMulti(queries: string[], topKPerQuery: number = 5, minSimilarity: number = 0): Promise<SearchResult[]> {
+    if (this.documents.length === 0) return []
+
+    const allResults = await Promise.all(queries.map((q) => this.search(q, topKPerQuery, minSimilarity)))
+
+    // Merge, keeping best similarity score per unique chunk
+    const seen = new Map<string, SearchResult>()
+    for (const results of allResults) {
+      for (const result of results) {
+        const id = result.document.id
+        const existing = seen.get(id)
+        if (!existing || result.similarity > existing.similarity) {
+          seen.set(id, result)
+        }
+      }
+    }
+
+    return Array.from(seen.values()).sort((a, b) => b.similarity - a.similarity)
   }
 
   /**

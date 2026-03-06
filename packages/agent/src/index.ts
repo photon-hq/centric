@@ -18,6 +18,9 @@ import {
   generateFixedPriceResponse,
   generateErrorResponse,
   sanitizeEmDashes,
+  buildSearchQueries,
+  isCatalogQuery,
+  isVagueFollowUp,
   logger,
   type LoadedConfig,
   type Product,
@@ -124,9 +127,22 @@ function detectHumanHandoff(message: string, keywords: string[]): boolean {
 }
 
 function detectProductInquiry(message: string, products: Product[]): Product | null {
+  const msg = message.toLowerCase()
   for (const product of products) {
     const keywords = [product.name.toLowerCase(), product.id, ...product.keywords]
-    if (keywords.some((keyword) => message.toLowerCase().includes(keyword))) {
+    for (const keyword of keywords) {
+      // Use word-boundary matching to avoid "standard" matching "non-standard" or "understand"
+      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const wordBoundary = new RegExp(`\\b${escaped}\\b`, 'i')
+      if (!wordBoundary.test(msg)) continue
+
+      // Skip if the keyword is preceded by a negation within 5 words
+      const negationPattern = new RegExp(
+        `\\b(no|not|don'?t|never|without|except|instead of|cancel|stop|avoid|skip|remove)\\b.{0,40}\\b${escaped}\\b`,
+        'i'
+      )
+      if (negationPattern.test(msg)) continue
+
       return product
     }
   }
@@ -172,15 +188,40 @@ function detectPurchaseIntent(message: string): boolean {
 // Core Agent Logic
 // ============================================================================
 
-async function getRelevantContext(query: string, vectorStore: DocumentVectorStore): Promise<string> {
+async function getRelevantContext(
+  query: string,
+  vectorStore: DocumentVectorStore,
+  recentTopics: string[] = []
+): Promise<string> {
   const maxResults = config.features.knowledgeBase.maxResults
-  const results = await vectorStore.search(query, maxResults, config.features.knowledgeBase.similarityThreshold)
+  const threshold = config.features.knowledgeBase.similarityThreshold
+
+  // For vague follow-ups ("what about pricing?"), prepend recent topics so the
+  // search has enough signal to find the right documents.
+  const effectiveQuery =
+    isVagueFollowUp(query) && recentTopics.length > 0
+      ? `${recentTopics.join(' ')} ${query}`
+      : query
+
+  let results
+
+  if (isCatalogQuery(effectiveQuery)) {
+    // Widen search: more results, lower threshold ,  user wants a broad overview
+    results = await vectorStore.search(effectiveQuery, Math.max(maxResults * 3, 20), Math.min(threshold, 0.2))
+  } else {
+    const queries = buildSearchQueries(effectiveQuery)
+    results =
+      queries.length > 1
+        ? await vectorStore.searchMulti(queries, maxResults, threshold)
+        : await vectorStore.search(effectiveQuery, maxResults, threshold)
+  }
 
   if (results.length === 0) {
     return 'No specific documentation found for this query.'
   }
 
   return results
+    .slice(0, isCatalogQuery(effectiveQuery) ? Math.max(maxResults * 3, 20) : maxResults)
     .map((r, i) => `[Document ${i + 1}] ${r.content} (Relevance: ${(r.similarity * 100).toFixed(1)}%)`)
     .join('\n\n')
 }
@@ -193,15 +234,38 @@ async function handleNegotiation(
     return generateFixedPriceResponse(product.name, product.price)
   }
 
+  const existing = conversation.currentNegotiation
+  const isCounterOffer = existing?.productId === product.id
+
+  if (isCounterOffer && existing) {
+    existing.negotiationRound = (existing.negotiationRound ?? 1) + 1
+
+    // Round 2: offer the floor price if it's better than the current offer
+    if (existing.negotiationRound === 2 && existing.currentOffer > product.lowestNegotiationPrice) {
+      existing.currentOffer = product.lowestNegotiationPrice
+      const floorDiscount = Math.round(((product.price - product.lowestNegotiationPrice) / product.price) * 100)
+      return generateNegotiationResponse(
+        product.name,
+        product.price,
+        product.lowestNegotiationPrice,
+        product.features,
+        floorDiscount,
+        config.features.timeConstraints.offerValidityHours
+      )
+    }
+
+    // Round 3+: hold firm ,  this is our absolute best price
+    return generateFixedPriceResponse(product.name, existing.currentOffer)
+  }
+
+  // First negotiation attempt
   const discountPercent = config.features.negotiation.defaultDiscount
   const offeredPrice = Math.round(product.price * (1 - discountPercent))
 
-  // Check if offered price is acceptable
   if (offeredPrice < product.lowestNegotiationPrice) {
     return generateFixedPriceResponse(product.name, product.price)
   }
 
-  // Track negotiation state
   conversation.currentNegotiation = {
     productId: product.id,
     currentOffer: offeredPrice,
@@ -291,8 +355,15 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
       return await handleNegotiation(conversation, product)
     }
 
+    // Extract product/topic names mentioned in the last assistant message for follow-up query enrichment
+    const lastAssistantMsg = [...conversation.messageHistory].reverse().find((m) => m.role === 'assistant')?.content ?? ''
+    const recentTopics = productCatalog
+      .getAllProducts()
+      .map((p) => p.name)
+      .filter((name) => lastAssistantMsg.toLowerCase().includes(name.toLowerCase()))
+
     // Get relevant context from vector store
-    const documentContext = await getRelevantContext(message, vectorStore)
+    const documentContext = await getRelevantContext(message, vectorStore, recentTopics)
     const productContext = product
       ? `Product: ${product.name}\nPrice: $${product.price}\n${product.description}\n\nFeatures:\n${product.features.map((f) => `- ${f}`).join('\n')}`
       : ''
@@ -378,7 +449,8 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
         }
         completionOptions.messages = messages
       } else {
-        assistantMessage = sanitizeEmDashes(choice.message.content || 'I apologize, but I encountered an error.')
+        const content = (choice.message.content ?? '').trim()
+        assistantMessage = sanitizeEmDashes(content || generateErrorResponse(config.company))
         break
       }
     }
