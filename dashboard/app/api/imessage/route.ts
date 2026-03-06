@@ -70,8 +70,8 @@ async function startAgent() {
 
     try {
         // Path to the agent script (one level up from dashboard)
-        const agentPath = path.join(process.cwd(), '..', 'support-agent.ts')
-        
+        const agentPath = path.join(process.cwd(), '..', 'packages', 'agent', 'src', 'index.ts')
+
         // Start the agent process
         agentProcess = spawn('bun', ['run', agentPath], {
             cwd: path.join(process.cwd(), '..'),

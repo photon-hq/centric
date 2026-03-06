@@ -26,7 +26,33 @@ export default function ChatInterface() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [senderPhone, setSenderPhone] = useState(DEFAULT_TEST_PHONE)
+  const [isHandoffActive, setIsHandoffActive] = useState(false)
+  const sessionId = useRef(crypto.randomUUID())
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Poll for human replies while handoff is active
+  useEffect(() => {
+    if (!isHandoffActive) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      return
+    }
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/chat/poll?sessionId=${sessionId.current}`)
+        const data = await res.json()
+        if (data.messages?.length) {
+          setMessages(prev => [...prev, ...data.messages.map((text: string) => ({
+            role: 'assistant' as const,
+            content: text,
+            timestamp: new Date()
+          }))])
+        }
+        if (data.handoffResolved) setIsHandoffActive(false)
+      } catch { /* best-effort */ }
+    }, 3000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [isHandoffActive])
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const isUserNearBottomRef = useRef<boolean>(true)
   const shouldScrollRef = useRef<boolean>(false)
@@ -82,12 +108,9 @@ export default function ChatInterface() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-session-id': sessionId.current,
         },
-        body: JSON.stringify({
-          message: input,
-          history: messages.slice(-10),
-          senderPhone
-        }),
+        body: JSON.stringify({ message: input, senderPhone }),
       })
 
       const data = await response.json()
@@ -99,6 +122,8 @@ export default function ChatInterface() {
       }
 
       setMessages(prev => [...prev, assistantMessage])
+
+      if (data.handoffActive) setIsHandoffActive(true)
     } catch (error) {
       console.error('Error:', error)
       const errorMessage: Message = {
@@ -144,7 +169,7 @@ export default function ChatInterface() {
               />
             </div>
             <button
-              onClick={() => setMessages([])}
+              onClick={() => { setMessages([]); setIsHandoffActive(false); sessionId.current = crypto.randomUUID() }}
               className="text-xs text-gray-400 hover:text-black transition-colors flex items-center gap-1"
             >
               <RotateCcw className="w-3 h-3" />

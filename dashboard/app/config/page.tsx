@@ -184,6 +184,10 @@ export default function ConfigPage() {
   const [isSavingSlack, setIsSavingSlack] = useState(false)
   const [isLoadingSlack, setIsLoadingSlack] = useState(false)
 
+  // Connection test state
+  const [mcpTestResults, setMCPTestResults] = useState<Record<string, { ok: boolean; toolCount?: number; error?: string } | null | undefined>>({})
+  const [slackTestResult, setSlackTestResult] = useState<{ ok: boolean; team?: string; botName?: string; error?: string } | null>(null)
+
   // File input refs for import
   const sopFileInputRef = useRef<HTMLInputElement>(null)
   const mcpFileInputRef = useRef<HTMLInputElement>(null)
@@ -840,6 +844,40 @@ export default function ConfigPage() {
       }
     } catch (error) {
       console.error('Error toggling MCP server:', error)
+    }
+  }
+
+  const handleTestMCPServer = async (serverId: string, url: string) => {
+    setMCPTestResults(prev => ({ ...prev, [serverId]: null }))
+    try {
+      const res = await fetch('/api/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test', url })
+      })
+      const data = await res.json()
+      setMCPTestResults(prev => ({ ...prev, [serverId]: data }))
+      setTimeout(() => setMCPTestResults(prev => ({ ...prev, [serverId]: undefined })), 8000)
+    } catch (err) {
+      setMCPTestResults(prev => ({ ...prev, [serverId]: { ok: false, error: String(err) } }))
+      setTimeout(() => setMCPTestResults(prev => ({ ...prev, [serverId]: undefined })), 8000)
+    }
+  }
+
+  const handleTestSlack = async () => {
+    setSlackTestResult(null)
+    try {
+      const res = await fetch('/api/slack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test' })
+      })
+      const data = await res.json()
+      setSlackTestResult(data)
+      setTimeout(() => setSlackTestResult(null), 8000)
+    } catch (err) {
+      setSlackTestResult({ ok: false, error: String(err) })
+      setTimeout(() => setSlackTestResult(null), 8000)
     }
   }
 
@@ -2164,12 +2202,27 @@ export default function ConfigPage() {
                           {server.type.toUpperCase()}
                         </span>
                       </div>
-                      <button
-                        onClick={() => handleDeleteMCPServer(server.id)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all ml-2"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1 ml-2">
+                        {server.type !== 'stdio' && server.url && (
+                          <button
+                            onClick={() => handleTestMCPServer(server.id, server.url)}
+                            className="text-xs px-2 py-1 rounded-md text-gray-400 hover:text-purple-600 hover:bg-purple-50 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            {mcpTestResults[server.id] === null ? '...' : 'Test'}
+                          </button>
+                        )}
+                        {mcpTestResults[server.id] != null && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${mcpTestResults[server.id]?.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {mcpTestResults[server.id]?.ok ? `${mcpTestResults[server.id]?.toolCount} tools` : mcpTestResults[server.id]?.error?.slice(0, 30)}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleDeleteMCPServer(server.id)}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2307,7 +2360,20 @@ export default function ConfigPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end pt-1">
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleTestSlack}
+                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
+                      >
+                        Test Connection
+                      </button>
+                      {slackTestResult && (
+                        <span className={`text-xs px-2 py-1 rounded-full ${slackTestResult.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {slackTestResult.ok ? `${slackTestResult.team} / @${slackTestResult.botName}` : slackTestResult.error}
+                        </span>
+                      )}
+                    </div>
                     <button
                       onClick={handleSaveSlack}
                       disabled={isSavingSlack}

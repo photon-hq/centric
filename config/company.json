@@ -1,17 +1,17 @@
 {
-  "name": "My Company",
-  "industry": "Customer Support",
-  "description": "AI-powered customer support for our business",
-  "website": "",
+  "name": "Photon",
+  "industry": "Developer Tools",
+  "description": "Open-source SDK and infrastructure for building AI agents on iMessage, WhatsApp, Telegram and other messaging platforms. Products include Spectrum (multi-channel agent framework) and iMessage Kit (TypeScript SDK for macOS iMessage automation).",
+  "website": "https://photon.codes",
   "phone": "",
-  "email": "",
-  "agentName": "Assistant",
+  "email": "daniel@photon.codes",
+  "agentName": "Photon Support",
   "features": [
-    "Product information and recommendations",
-    "Order support and tracking",
-    "Account management",
-    "Technical support",
-    "Billing inquiries"
+    "iMessage Kit SDK support",
+    "Spectrum framework questions",
+    "Advanced iMessage Kit features",
+    "Installation and setup help",
+    "Debugging and troubleshooting"
   ],
   "greeting": {
     "enabled": true,

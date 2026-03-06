@@ -60,12 +60,27 @@ export async function GET() {
   }
 }
 
-// POST - Add a new MCP server
+// POST - Add a new MCP server or test connection
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, url, apiKey, type = 'sse', command, args } = body
-    
+    const { action, name, url, apiKey, type = 'sse', command, args } = body
+
+    // Test MCP server connectivity
+    if (action === 'test') {
+      if (!url) return NextResponse.json({ error: 'URL is required for test' }, { status: 400 })
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 5000)
+        const res = await fetch(`${url}/tools`, { signal: controller.signal })
+        clearTimeout(timer)
+        const data = await res.json()
+        return NextResponse.json({ ok: true, toolCount: data.tools?.length ?? 0 })
+      } catch (err) {
+        return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) })
+      }
+    }
+
     if (!name) {
       return NextResponse.json(
         { error: 'Server name is required' },

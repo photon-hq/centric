@@ -3,7 +3,7 @@
  * Refactored to use modular core packages
  */
 
-import { IMessageSDK, type Message } from '@photon-ai/imessage-kit'
+import { IMessageSDK, type Message, type Attachment } from '@photon-ai/imessage-kit'
 import OpenAI from 'openai'
 import {
   ConfigLoader,
@@ -13,16 +13,15 @@ import {
   SlackNotifier,
   generateSystemPrompt,
   generateContextPrompt,
-  generateGreeting,
   generateNegotiationResponse,
   generatePurchaseResponse,
   generateFixedPriceResponse,
   generateErrorResponse,
+  sanitizeEmDashes,
   logger,
   type LoadedConfig,
   type Product,
-  type ConversationState,
-  type NegotiationState
+  type ConversationState
 } from '@photon/core'
 
 // ============================================================================
@@ -39,6 +38,8 @@ if (!process.env.OPENAI_API_KEY) {
 // Load all configuration
 const configLoader = new ConfigLoader()
 let config: LoadedConfig
+let configLoadedAt = 0
+const CONFIG_RELOAD_MS = 60_000
 
 logger.info('Starting Photon Customer Support Agent v2.0')
 
@@ -46,14 +47,35 @@ logger.info('Starting Photon Customer Support Agent v2.0')
 let sdk: IMessageSDK
 let slackNotifier: SlackNotifier | null = null
 let mcpManager: MCPManager
+let agentProductCatalog: ProductCatalog
 
-// ============================================================================
-// Utilities
-// ============================================================================
+async function reloadConfigIfStale(): Promise<void> {
+  if (Date.now() - configLoadedAt < CONFIG_RELOAD_MS) return
+  try {
+    config = await configLoader.loadAll()
+    agentProductCatalog = new ProductCatalog(config.products)
+    configLoadedAt = Date.now()
+    logger.info('Configuration reloaded')
+  } catch (err) {
+    logger.warn({ err }, 'Failed to reload config, continuing with existing config')
+  }
+}
 
-function sanitizeEmDashes(text: string): string {
-  if (!text) return text
-  return text.replace(/\s*[\u2014\u2013]\s*/g, ', ')
+let loadedKbVersion = ''
+
+async function checkKbVersion(vectorStore: DocumentVectorStore): Promise<void> {
+  try {
+    const { promises: fs } = await import('fs')
+    const raw = await fs.readFile('config/kb-version.json', 'utf-8')
+    const { version } = JSON.parse(raw) as { version: string }
+    if (version && version !== loadedKbVersion) {
+      logger.info({ version }, 'Knowledge base updated, reinitializing vector store')
+      await vectorStore.initialize()
+      loadedKbVersion = version
+    }
+  } catch {
+    // version file missing or unreadable ,  skip
+  }
 }
 
 // ============================================================================
@@ -70,6 +92,7 @@ const DEBOUNCE_MS = 1500
 
 interface SenderQueue {
   pending: string[]
+  pendingAttachments: Attachment[]
   debounceTimer: ReturnType<typeof setTimeout> | null
   isProcessing: boolean
 }
@@ -78,7 +101,7 @@ const senderQueues = new Map<string, SenderQueue>()
 
 function getSenderQueue(sender: string): SenderQueue {
   if (!senderQueues.has(sender)) {
-    senderQueues.set(sender, { pending: [], debounceTimer: null, isProcessing: false })
+    senderQueues.set(sender, { pending: [], pendingAttachments: [], debounceTimer: null, isProcessing: false })
   }
   return senderQueues.get(sender)!
 }
@@ -164,8 +187,7 @@ async function getRelevantContext(query: string, vectorStore: DocumentVectorStor
 
 async function handleNegotiation(
   conversation: ConversationState,
-  product: Product,
-  userMessage: string
+  product: Product
 ): Promise<string> {
   if (!product.negotiable) {
     return generateFixedPriceResponse(product.name, product.price)
@@ -224,7 +246,7 @@ async function generateHandoffSummary(conversation: ConversationState): Promise<
   }
 }
 
-async function generateResponse(sender: string, message: string, vectorStore: DocumentVectorStore, productCatalog: ProductCatalog): Promise<string> {
+async function generateResponse(sender: string, message: string, vectorStore: DocumentVectorStore, productCatalog: ProductCatalog, images: Attachment[] = []): Promise<string> {
   const conversation = getConversation(sender)
 
   try {
@@ -266,7 +288,7 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
     // Check for product inquiry and price negotiation
     const product = detectProductInquiry(message, productCatalog.getAllProducts())
     if (product && detectPriceNegotiation(message) && config.features.negotiation.enabled) {
-      return await handleNegotiation(conversation, product, message)
+      return await handleNegotiation(conversation, product)
     }
 
     // Get relevant context from vector store
@@ -287,12 +309,31 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
     const systemPrompt = generateSystemPrompt(config.company, config.sops || [], config.features, sender, mcpManager.getTools().length > 0)
     const contextPrompt = generateContextPrompt(documentContext, productContext)
 
+    // Build image content for the current user turn if attachments present
+    let userContent: OpenAI.Chat.ChatCompletionUserMessageParam['content'] = message
+    if (images.length > 0) {
+      const { promises: fs } = await import('fs')
+      const imageParts: OpenAI.Chat.ChatCompletionContentPart[] = []
+      for (const img of images) {
+        try {
+          const buf = await fs.readFile(img.path)
+          imageParts.push({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${buf.toString('base64')}` } })
+        } catch (err) {
+          logger.warn({ err, path: img.path }, 'Failed to read attachment, skipping')
+        }
+      }
+      if (imageParts.length > 0) {
+        userContent = [{ type: 'text', text: message }, ...imageParts]
+      }
+    }
+
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt + '\n\n' + contextPrompt },
-      ...conversation.messageHistory.map((msg) => ({
+      ...conversation.messageHistory.slice(0, -1).map((msg) => ({
         role: msg.role as 'user' | 'assistant',
         content: msg.content
-      }))
+      })),
+      { role: 'user', content: userContent }
     ]
 
     const openAITools = mcpManager.getTools().length > 0 ? mcpManager.convertToOpenAIFormat() : undefined
@@ -362,6 +403,7 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
 async function main() {
   // Load configuration
   config = await configLoader.loadAll()
+  configLoadedAt = Date.now()
 
   logger.info({ company: config.company.name, agentName: config.company.agentName }, 'Configuration loaded')
 
@@ -372,7 +414,7 @@ async function main() {
     openai,
     config.ai.embeddingModel
   )
-  const productCatalog = new ProductCatalog(config.products)
+  agentProductCatalog = new ProductCatalog(config.products)
   mcpManager = new MCPManager()
 
   // Initialize vector store
@@ -432,6 +474,7 @@ async function main() {
 
     queue.isProcessing = true
     const messages = queue.pending.splice(0) // drain atomically
+    const imageAttachments = queue.pendingAttachments.splice(0)
     const combinedText = messages.join('\n')
 
     logger.info({ sender, messageCount: messages.length }, 'Processing queued messages')
@@ -457,17 +500,15 @@ async function main() {
     const isFirstMessage = conversation.messageHistory.length === 0
 
     try {
-      const response = await generateResponse(sender, combinedText, vectorStore, productCatalog)
+      await reloadConfigIfStale()
+      await checkKbVersion(vectorStore)
+      const response = await generateResponse(sender, combinedText, vectorStore, agentProductCatalog, imageAttachments)
 
-      let finalMessage = response
       if (isFirstMessage) {
-        const greeting = generateGreeting(config.company, true)
-        if (greeting) {
-          finalMessage = `${greeting}\n\n${response}`
-        }
+        conversation.firstMessageShown = true
       }
 
-      await sdk.send(sender, sanitizeEmDashes(finalMessage))
+      await sdk.send(sender, response)
       logger.info({ sender }, 'Response sent successfully')
     } catch (error) {
       logger.error({ error, sender }, 'Error processing message')
@@ -494,6 +535,8 @@ async function main() {
 
       const queue = getSenderQueue(sender)
       queue.pending.push(text)
+      const imgAttachments = msg.attachments.filter((a) => a.isImage)
+      if (imgAttachments.length > 0) queue.pendingAttachments.push(...imgAttachments)
 
       // Reset debounce ,  wait for the user to finish typing before processing
       if (queue.debounceTimer) clearTimeout(queue.debounceTimer)

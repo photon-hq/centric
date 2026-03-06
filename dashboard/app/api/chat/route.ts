@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import {
   DocumentVectorStore,
   ProductCatalog,
+  SlackNotifier,
   type Product,
   type NegotiableProduct,
   type ConversationState,
@@ -12,11 +13,13 @@ import {
   generatePurchaseResponse,
   generateFixedPriceResponse,
   generateErrorResponse,
-  generateGreeting,
+  sanitizeEmDashes,
+  MCPManager,
   ConfigLoader,
   type LoadedConfig
 } from '@photon/core'
 import { readKnowledgeVersion } from '../../../lib/knowledge-version'
+import { humanMsgQueues, resolvedSessions, setDashboardSlackNotifier } from './state'
 import * as path from 'path'
 import * as fsSync from 'fs'
 
@@ -71,186 +74,13 @@ let loadedKnowledgeVersion = '0'
 // MCP Integration
 // ============================================================================
 
-interface MCPServer {
-  id: string
-  name: string
-  url: string
-  apiKey?: string
-  type: 'stdio' | 'sse' | 'streamable-http'
-  command?: string
-  args?: string[]
-  enabled: boolean
-}
-
-interface MCPConfig {
-  enabled: boolean
-  servers: MCPServer[]
-  lastUpdated: string | null
-}
-
-interface MCPTool {
-  name: string
-  description: string
-  parameters: Record<string, any>
-  serverUrl: string
-  serverApiKey?: string
-}
-
-let mcpTools: MCPTool[] = []
-let mcpEnabled = false
-let mcpInitialized = false
+let mcpManager: MCPManager | null = null
 
 // ============================================================================
-// Em-Dash Sanitizer
+// Slack Notifier (dashboard singleton)
 // ============================================================================
 
-/**
- * Automatically replace em-dashes and en-dashes with ", " in all LLM output
- * Ensures consistent, human-friendly text formatting without problematic punctuation
- * Handles spaces around dashes to prevent extra whitespace (e.g., "Hi, I'm" → "Hi, I'm")
- */
-function sanitizeEmDashes(text: string): string {
-  if (!text) return text
-  // Replace em-dash (U+2014) or en-dash (U+2013) plus surrounding spaces with a single ", "
-  return text.replace(/\s*[\u2014\u2013]\s*/g, ', ')
-}
-
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 8000): Promise<Response> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    return await fetch(url, {
-      ...options,
-      signal: controller.signal
-    })
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-async function loadMCPConfig(): Promise<void> {
-  if (mcpInitialized) return
-  
-  try {
-    const configPath = path.join(process.cwd(), '..', 'config', 'mcp-config.json')
-    const configData = await fsSync.promises.readFile(configPath, 'utf-8')
-    const config: MCPConfig = JSON.parse(configData)
-    
-    mcpEnabled = config.enabled
-    
-    if (!mcpEnabled) {
-      console.log('⚠️  MCP is disabled in config')
-      mcpInitialized = true
-      return
-    }
-    
-    // Fetch tools from each active server
-    const toolPromises = config.servers
-      .filter(server => server.enabled && (server.type === 'sse' || server.type === 'streamable-http'))
-      .map(async (server) => {
-        try {
-          const toolsUrl = `${server.url}/tools`
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-          if (server.apiKey) {
-            headers['Authorization'] = `Bearer ${server.apiKey}`
-          }
-          
-          const response = await fetchWithTimeout(toolsUrl, { headers }, 5000)
-          if (!response.ok) {
-            console.warn(`⚠️  Failed to fetch tools from ${server.name}: ${response.statusText}`)
-            return []
-          }
-          
-          const data: any = await response.json()
-          const tools = data.tools || []
-          
-          return tools.map((tool: any) => ({
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.parameters || {},
-            serverUrl: server.url,
-            serverApiKey: server.apiKey
-          }))
-        } catch (error) {
-          console.warn(`⚠️  Error fetching tools from ${server.name}:`, error)
-          return []
-        }
-      })
-    
-    const toolArrays = await Promise.all(toolPromises)
-    mcpTools = toolArrays.flat()
-    
-    if (mcpTools.length > 0) {
-      console.log(`✅ Dashboard: Loaded ${mcpTools.length} MCP tools`)
-    } else {
-      console.log('⚠️  Dashboard: No MCP tools available')
-    }
-    
-    mcpInitialized = true
-  } catch (error) {
-    console.warn('⚠️  Dashboard: Failed to load MCP config:', error)
-    mcpEnabled = false
-    mcpInitialized = true
-  }
-}
-
-function convertMCPToolsToOpenAIFormat(): OpenAI.Chat.ChatCompletionTool[] {
-  return mcpTools.map(tool => {
-    // Build properties object without 'required' field in each param
-    const properties: Record<string, any> = {}
-    const requiredParams: string[] = []
-    
-    for (const [paramName, paramDef] of Object.entries(tool.parameters)) {
-      const { required, ...paramProps } = paramDef as any
-      properties[paramName] = paramProps
-      if (required) {
-        requiredParams.push(paramName)
-      }
-    }
-    
-    return {
-      type: 'function' as const,
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: {
-          type: 'object',
-          properties,
-          required: requiredParams
-        }
-      }
-    }
-  })
-}
-
-async function executeMCPTool(toolName: string, parameters: Record<string, any>): Promise<any> {
-  const tool = mcpTools.find(t => t.name === toolName)
-  if (!tool) {
-    throw new Error(`Tool ${toolName} not found`)
-  }
-  
-  const callUrl = `${tool.serverUrl}/call`
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (tool.serverApiKey) {
-    headers['Authorization'] = `Bearer ${tool.serverApiKey}`
-  }
-  
-  const response = await fetchWithTimeout(callUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      tool: toolName,
-      parameters
-    })
-  }, 15000)
-  
-  if (!response.ok) {
-    throw new Error(`MCP tool call failed: ${response.statusText}`)
-  }
-  
-  return await response.json()
-}
+let slackNotifier: SlackNotifier | null = null
 
 async function initialize() {
   if (isInitialized) return
@@ -304,7 +134,40 @@ async function initialize() {
     }
 
     // Load MCP tools (non-fatal if unavailable)
-    await loadMCPConfig()
+    mcpManager = new MCPManager()
+    await mcpManager.loadConfig(config.mcp ?? null).catch((err) => {
+      console.warn('⚠️  Dashboard: Failed to load MCP config:', err)
+    })
+
+    // Initialize Slack notifier if configured
+    const handoffConfig = config.company.humanHandoff
+    const botToken = process.env.SLACK_BOT_TOKEN
+    const appToken = process.env.SLACK_APP_TOKEN
+    const channelId = process.env.SLACK_CHANNEL_ID || handoffConfig?.slackChannelId || ''
+
+    if (handoffConfig?.slackEnabled && botToken && appToken && channelId) {
+      slackNotifier = new SlackNotifier(botToken, appToken, channelId, {
+        onMessageForCustomer: (sessionId, text) => {
+          const q = humanMsgQueues.get(sessionId) ?? []
+          q.push(text)
+          humanMsgQueues.set(sessionId, q)
+        },
+        onResolve: (sessionId) => {
+          const conv = conversations.get(sessionId)
+          if (conv) {
+            conv.humanHandoffActive = false
+            conv.slackThreadTs = undefined
+            resolvedSessions.add(sessionId)
+          }
+        }
+      })
+      await slackNotifier.start().catch((err) => {
+        console.warn('⚠️  Dashboard: Failed to start Slack notifier:', err)
+        slackNotifier = null
+      })
+      setDashboardSlackNotifier(slackNotifier)
+      if (slackNotifier) console.log('✅ Dashboard: Slack notifier started')
+    }
 
     isInitialized = true
     console.log(`✅ Agent initialized with ${vectorStore.getDocumentCount()} documents for ${config.company.name}`)
@@ -312,6 +175,9 @@ async function initialize() {
 
   try {
     await initPromise
+  } catch {
+    // initialization failed ,  clear so the next request retries
+    initPromise = null
   } finally {
     if (isInitialized) {
       initPromise = null
@@ -325,6 +191,8 @@ async function ensureKnowledgeBaseVersion(): Promise<void> {
     isInitialized = false
     initPromise = null
     vectorStore = null
+    config = null        // reload company/features/products on next request
+    productCatalog = null
     loadedKnowledgeVersion = currentVersion
   }
 }
@@ -369,22 +237,40 @@ function detectTicketClose(message: string): boolean {
     'close ticket', 'close the ticket', 'close this ticket',
     'resolve ticket', 'mark resolved', 'that\'s all', "that's all",
     'no more questions', 'nothing else', 'all done', 'all good',
-    'thanks, goodbye', 'thank you, goodbye', 'bye', 'goodbye'
+    'thanks, goodbye', 'thank you, goodbye'
   ]
   return closePhrases.some(phrase => lower.includes(phrase))
 }
 
 function detectHumanHandoff(message: string): boolean {
-  const handoffPhrases = [
+  const keywords = config?.company.humanHandoff?.keywords
+  const phrases = keywords?.length ? keywords : [
     'speak to a human', 'talk to a person', 'real person', 'human agent',
     'customer service', 'representative', 'speak to someone', 'talk to agent',
     'need a human', 'want a person', 'actual person', 'live agent',
     'human help', 'human support'
   ]
-  
-  return handoffPhrases.some(phrase => 
-    message.toLowerCase().includes(phrase)
-  )
+  return phrases.some(phrase => message.toLowerCase().includes(phrase.toLowerCase()))
+}
+
+async function generateHandoffSummary(conversation: ConversationState): Promise<string> {
+  try {
+    const historyText = conversation.messageHistory
+      .map((m) => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
+      .join('\n')
+    const completion = await openai.chat.completions.create({
+      model: process.env.MODEL || 'gpt-5-mini',
+      messages: [
+        { role: 'system', content: "Summarize the customer's issue in 2-3 sentences for a support agent taking over." },
+        { role: 'user', content: `Conversation:\n${historyText}` }
+      ],
+      temperature: 0.3,
+      max_completion_tokens: 150
+    })
+    return completion.choices[0]?.message?.content || 'Customer requested human support.'
+  } catch {
+    return 'Customer requested human support.'
+  }
 }
 
 async function getRelevantContext(query: string): Promise<string> {
@@ -485,7 +371,6 @@ async function handleNegotiation(
 async function generateResponse(
   sessionId: string,
   userMessage: string,
-  history?: Array<{ role: string; content: string }>,
   senderPhone?: string
 ): Promise<string> {
   try {
@@ -524,35 +409,46 @@ async function generateResponse(
     return closeMsg
   }
 
-  // Check for human handoff request
-  if (detectHumanHandoff(userMessage)) {
-    conversation.humanHandoffRequested = true
-  }
-  
   // Add user message to history
   conversation.messageHistory.push({
     role: 'user',
     content: userMessage
   })
-  
+
   // Keep only last 10 messages
   if (conversation.messageHistory.length > 10) {
     conversation.messageHistory = conversation.messageHistory.slice(-10)
   }
-  
-  // If human handoff requested, provide appropriate response
-  if (conversation.humanHandoffRequested) {
-    const handoffMessage = sanitizeEmDashes("I understand you'd like to speak with a human. Human handoff functionality is being set up and will be available soon. In the meantime, I'm here to help with any questions you have!")
-    
-    conversation.messageHistory.push({
-      role: 'assistant',
-      content: handoffMessage
-    })
-    
-    // Reset flag after acknowledging (in production, this would route to human)
+
+  // If already in human handoff, relay message to Slack and hold
+  if (conversation.humanHandoffActive) {
+    if (slackNotifier && conversation.slackThreadTs) {
+      await slackNotifier.postCustomerMessage(conversation.slackThreadTs, userMessage)
+    }
+    const holdMsg = sanitizeEmDashes("Your message has been sent to our support team. They'll reply here shortly.")
+    conversation.messageHistory.push({ role: 'assistant', content: holdMsg })
+    return holdMsg
+  }
+
+  // Check for human handoff request
+  if (config?.company.humanHandoff?.enabled && detectHumanHandoff(userMessage)) {
+    conversation.humanHandoffRequested = true
+    conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
+
+    const handoffMsg = sanitizeEmDashes(config.company.humanHandoff.message || "I'll connect you with a team member. Please hold on.")
+    conversation.messageHistory.push({ role: 'assistant', content: handoffMsg })
+
+    if (slackNotifier) {
+      const summary = await generateHandoffSummary(conversation)
+      const threadTs = await slackNotifier.postHandoff(sessionId, conversation, summary)
+      if (threadTs) {
+        conversation.slackThreadTs = threadTs
+        conversation.humanHandoffActive = true
+      }
+    }
+
     conversation.humanHandoffRequested = false
-    
-    return handoffMessage
+    return handoffMsg
   }
   
   // Detect product inquiries
@@ -599,7 +495,8 @@ ${desc}`
   const contextPrompt = generateContextPrompt(documentContext, productContext)
   
   // Generate system prompt from config
-  const systemPrompt = generateSystemPrompt(config!.company, config!.sops || [], config!.features, senderPhone, mcpEnabled && mcpTools.length > 0)
+  const hasMCPTools = (mcpManager?.isEnabled() && mcpManager.getTools().length > 0) ?? false
+  const systemPrompt = generateSystemPrompt(config!.company, config!.sops || [], config!.features, senderPhone, hasMCPTools)
 
   // Generate AI response with MCP tool support
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -618,8 +515,8 @@ ${desc}`
     max_completion_tokens: config!.ai.maxTokens
   }
   
-  if (mcpEnabled && mcpTools.length > 0) {
-    completionOptions.tools = convertMCPToolsToOpenAIFormat()
+  if (hasMCPTools) {
+    completionOptions.tools = mcpManager!.convertToOpenAIFormat()
     completionOptions.tool_choice = 'auto'
   }
   
@@ -653,7 +550,7 @@ ${desc}`
           console.log(`🔧 Dashboard: Executing MCP tool: ${functionName}`, functionArgs)
           
           try {
-            const result = await executeMCPTool(functionName, functionArgs)
+            const result = await mcpManager!.executeTool(functionName, functionArgs)
             
             // Add tool result to messages
             messages.push({
@@ -692,13 +589,9 @@ ${desc}`
     assistantMessage = sanitizeEmDashes("I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request.")
   }
   
-  let finalMessage = sanitizeEmDashes(assistantMessage)
+  const finalMessage = sanitizeEmDashes(assistantMessage)
 
   if (isFirstMessage) {
-    const greeting = generateGreeting(config!.company, true)
-    if (greeting) {
-      finalMessage = `${greeting}\n\n${finalMessage}`
-    }
     conversation.firstMessageShown = true
   }
 
@@ -712,21 +605,23 @@ ${desc}`
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, history, senderPhone } = await request.json()
-    
+    const { message, senderPhone } = await request.json()
+
     if (!message) {
       return NextResponse.json(
         { error: 'Message is required' },
         { status: 400 }
       )
     }
-    
+
     // Use a session ID (in production, use actual session management)
     const sessionId = request.headers.get('x-session-id') || 'default'
-    
-    const response = await generateResponse(sessionId, message, history, senderPhone)
-    
-    return NextResponse.json({ response })
+
+    const response = await generateResponse(sessionId, message, senderPhone)
+    const conv = conversations.get(sessionId)
+    const handoffActive = conv?.humanHandoffActive ?? false
+
+    return NextResponse.json({ response, handoffActive })
     
   } catch (error) {
     console.error('API Error:', error)

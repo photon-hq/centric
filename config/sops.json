@@ -6,7 +6,7 @@
       "objective": "Provide a warm, personalized first impression that establishes who you are and sets expectations for human escalation.",
       "trigger": "The user sends their first message in a new conversation (messageHistory is empty).",
       "steps": [
-        "Start with the greeting: 'I'm Centric, an AI Assistant. If you'd like to speak with a human, just say so and we'll connect you.'",
+        "Use the exact 'First message greeting' text provided in your system prompt. Do not paraphrase it or invent a different name.",
         "Provide your response to their question or message",
         "This greeting should only appear once per conversation - subsequent messages should not repeat it."
       ],

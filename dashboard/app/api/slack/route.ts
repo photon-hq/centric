@@ -54,10 +54,25 @@ export async function GET() {
   }
 }
 
-// POST - save Slack config
+// POST - save Slack config or test connection
 export async function POST(request: NextRequest) {
   try {
-    const { slackEnabled, slackChannelId, botToken, appToken } = await request.json()
+    const body = await request.json()
+    const { action, slackEnabled, slackChannelId, botToken, appToken } = body
+
+    // Test Slack bot token
+    if (action === 'test') {
+      const envContent = await readEnvFile()
+      const tokenMatch = envContent.match(/^SLACK_BOT_TOKEN=(.+)$/m)
+      const token = tokenMatch?.[1]?.trim()
+      if (!token) return NextResponse.json({ ok: false, error: 'SLACK_BOT_TOKEN not set' })
+      const res = await fetch('https://slack.com/api/auth.test', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      if (data.ok) return NextResponse.json({ ok: true, team: data.team, botName: data.user })
+      return NextResponse.json({ ok: false, error: data.error })
+    }
 
     // Update company.json
     const company = await readCompanyJson()

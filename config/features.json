@@ -16,8 +16,8 @@
   "knowledgeBase": {
     "enabled": true,
     "documentsPath": "./documents",
-    "maxResults": 5,
-    "similarityThreshold": 0.7
+    "maxResults": 7,
+    "similarityThreshold": 0.4
   },
   "timeConstraints": {
     "offerValidityHours": 24,
