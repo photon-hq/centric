@@ -417,11 +417,18 @@ async function handleNegotiation(
   )
 }
 
+interface ToolCallRecord {
+  name: string
+  args: Record<string, any>
+  result: string
+  isKbSearch: boolean
+}
+
 async function generateResponse(
   sessionId: string,
   userMessage: string,
   senderPhone?: string
-): Promise<string> {
+): Promise<{ message: string; toolCalls: ToolCallRecord[] }> {
   try {
     await waitForInitialization(6000)
   } catch (error) {
@@ -450,12 +457,14 @@ async function generateResponse(
   // Check if this is the first message
   const isFirstMessage = conversation.messageHistory.length === 0 && !conversation.firstMessageShown
 
+  const noTools: ToolCallRecord[] = []
+
   // Detect explicit ticket-close intent
   if (detectTicketClose(userMessage)) {
     conversation.ticketClosed = true
     const closeMsg = sanitizeEmDashes("Got it ,  I've closed this ticket. If you need anything else in the future, feel free to message again and we'll open a new one. Take care!")
     conversation.messageHistory.push({ role: 'assistant', content: closeMsg })
-    return closeMsg
+    return { message: closeMsg, toolCalls: noTools }
   }
 
   // Add user message to history
@@ -476,7 +485,7 @@ async function generateResponse(
     }
     const holdMsg = sanitizeEmDashes("Your message has been sent to our support team. They'll reply here shortly.")
     conversation.messageHistory.push({ role: 'assistant', content: holdMsg })
-    return holdMsg
+    return { message: holdMsg, toolCalls: noTools }
   }
 
   // Check for human handoff request
@@ -497,63 +506,44 @@ async function generateResponse(
     }
 
     conversation.humanHandoffRequested = false
-    return handoffMsg
+    return { message: handoffMsg, toolCalls: noTools }
   }
-  
+
   // Detect product inquiries
   const product = detectProductInquiry(userMessage)
   let productContext = ''
-  
+
   if (product && productCatalog) {
-    // Build product description
     const desc = `${product.name} - $${product.price}${product.negotiable ? ' (negotiable)' : ''}\n${product.description}\nFeatures:\n${product.features.map(f => `- ${f}`).join('\n')}`
-    productContext = `\n\nRELEVANT PRODUCT INFORMATION:
-${desc}`
-    
-    // Check for negotiation
+    productContext = `\n\nRELEVANT PRODUCT INFORMATION:\n${desc}`
+
     if (detectPriceNegotiation(userMessage) && 'negotiable' in product) {
-      const negotiationResponse = sanitizeEmDashes(await handleNegotiation(
-        conversation,
-        userMessage,
-        product as NegotiableProduct
-      ))
-      conversation.messageHistory.push({
-        role: 'assistant',
-        content: negotiationResponse
-      })
-      return negotiationResponse
+      const negotiationResponse = sanitizeEmDashes(await handleNegotiation(conversation, userMessage, product as NegotiableProduct))
+      conversation.messageHistory.push({ role: 'assistant', content: negotiationResponse })
+      return { message: negotiationResponse, toolCalls: noTools }
     }
-    
-    // Check for purchase intent
+
     if (detectPurchaseIntent(userMessage)) {
       const price = conversation.currentNegotiation?.currentOffer || product.price
       const purchaseResponse = sanitizeEmDashes(generatePurchaseResponse(config!.company, product.name, price, config!.features.timeConstraints.responseTimeMinutes))
-      
-      conversation.messageHistory.push({
-        role: 'assistant',
-        content: purchaseResponse
-      })
-      return purchaseResponse
+      conversation.messageHistory.push({ role: 'assistant', content: purchaseResponse })
+      return { message: purchaseResponse, toolCalls: noTools }
     }
   }
-  
+
   // Extract product/topic names from last assistant message for follow-up query enrichment
   const lastAssistantMsg = [...conversation.messageHistory].reverse().find((m) => m.role === 'assistant')?.content ?? ''
   const recentTopics = productCatalog
     ? productCatalog.getAllProducts().map((p) => p.name).filter((name) => lastAssistantMsg.toLowerCase().includes(name.toLowerCase()))
     : []
 
-  // Get relevant documents
+  // Get relevant documents (baseline context ,  LLM can search for more via tool)
   const documentContext = await getRelevantContext(userMessage, recentTopics)
-  
-  // Build context
   const contextPrompt = generateContextPrompt(documentContext, productContext)
-  
-  // Generate system prompt from config
+
   const hasMCPTools = (mcpManager?.isEnabled() && mcpManager.getTools().length > 0) ?? false
   const systemPrompt = generateSystemPrompt(config!.company, config!.sops || [], config!.features, senderPhone, hasMCPTools)
 
-  // Generate AI response with MCP tool support
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt + '\n\n' + contextPrompt },
     ...conversation.messageHistory.map(msg => ({
@@ -561,102 +551,87 @@ ${desc}`
       content: msg.content
     }))
   ]
-  
-  // Add MCP tools if enabled
+
+  // KB search is always available; MCP tools added when enabled
+  const kbSearchTool: OpenAI.Chat.ChatCompletionTool = {
+    type: 'function',
+    function: {
+      name: 'search_knowledge_base',
+      description: 'Search the company knowledge base for product documentation, features, pricing, and support content. Use this when you need more detail than what is already in context.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'The search query' } },
+        required: ['query']
+      }
+    }
+  }
+  const allTools: OpenAI.Chat.ChatCompletionTool[] = [kbSearchTool, ...(hasMCPTools ? mcpManager!.convertToOpenAIFormat() : [])]
+
   const completionOptions: OpenAI.Chat.ChatCompletionCreateParams = {
-    model: process.env.MODEL || 'gpt-5-mini',
+    model: process.env.MODEL || config!.ai.model,
     messages,
     temperature: config!.ai.temperature,
-    max_completion_tokens: config!.ai.maxTokens
+    max_completion_tokens: config!.ai.maxTokens,
+    tools: allTools,
+    tool_choice: 'auto'
   }
-  
-  if (hasMCPTools) {
-    completionOptions.tools = mcpManager!.convertToOpenAIFormat()
-    completionOptions.tool_choice = 'auto'
-  }
-  
+
   let assistantMessage = ''
-  const maxIterations = 5 // Prevent infinite loops
+  const toolCallLog: ToolCallRecord[] = []
+  const maxIterations = 5
   let iteration = 0
-  
-  // Tool calling loop
+
   while (iteration < maxIterations) {
     iteration++
-    
     const completion = await openai.chat.completions.create(completionOptions)
     const choice = completion.choices[0]
-    
-    // If the model wants to call tools
+
     if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
-      // Add assistant's tool call message to history
       messages.push(choice.message as OpenAI.Chat.ChatCompletionMessageParam)
-      
-      // Execute each tool call
+
       for (const toolCall of choice.message.tool_calls) {
         if (toolCall.type === 'function') {
           const functionName = toolCall.function.name
           let functionArgs: Record<string, any>
-          try {
-            functionArgs = JSON.parse(toolCall.function.arguments)
-          } catch {
-            functionArgs = {}
-          }
-          
-          console.log(`🔧 Dashboard: Executing MCP tool: ${functionName}`, functionArgs)
-          
-          try {
-            const result = await mcpManager!.executeTool(functionName, functionArgs)
-            
-            // Add tool result to messages
-            messages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result)
-            })
-            
-            console.log(`✅ Dashboard: Tool result:`, result)
-          } catch (error) {
-            console.error(`❌ Dashboard: Tool execution error:`, error)
-            
-            // Add error as tool result
-            messages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify({ 
-                success: false, 
-                error: error instanceof Error ? error.message : String(error) 
-              })
-            })
+          try { functionArgs = JSON.parse(toolCall.function.arguments) } catch { functionArgs = {} }
+
+          if (functionName === 'search_knowledge_base') {
+            const searchResult = await getRelevantContext(functionArgs.query ?? '', recentTopics)
+            messages.push({ role: 'tool', tool_call_id: toolCall.id, content: searchResult })
+            toolCallLog.push({ name: functionName, args: functionArgs, result: searchResult, isKbSearch: true })
+          } else {
+            console.log(`🔧 Dashboard: Executing tool: ${functionName}`, functionArgs)
+            try {
+              const result = await mcpManager!.executeTool(functionName, functionArgs)
+              const resultStr = JSON.stringify(result)
+              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: resultStr })
+              toolCallLog.push({ name: functionName, args: functionArgs, result: resultStr, isKbSearch: false })
+            } catch (error) {
+              const errStr = JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) })
+              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: errStr })
+              toolCallLog.push({ name: functionName, args: functionArgs, result: errStr, isKbSearch: false })
+            }
           }
         }
       }
-      
-      // Update messages for next iteration
       completionOptions.messages = messages
     } else {
-      // Got final text response
       const content = (choice.message.content ?? '').trim()
       assistantMessage = sanitizeEmDashes(content || generateErrorResponse(config!.company))
       break
     }
   }
-  
+
   if (!assistantMessage) {
     assistantMessage = sanitizeEmDashes("I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request.")
   }
-  
+
   const finalMessage = sanitizeEmDashes(assistantMessage)
 
-  if (isFirstMessage) {
-    conversation.firstMessageShown = true
-  }
+  if (isFirstMessage) conversation.firstMessageShown = true
+  conversation.messageHistory.push({ role: 'assistant', content: finalMessage })
 
-  conversation.messageHistory.push({
-    role: 'assistant',
-    content: finalMessage
-  })
-
-  return finalMessage
+  return { message: finalMessage, toolCalls: toolCallLog }
 }
 
 export async function POST(request: NextRequest) {
@@ -673,11 +648,11 @@ export async function POST(request: NextRequest) {
     // Use a session ID (in production, use actual session management)
     const sessionId = request.headers.get('x-session-id') || 'default'
 
-    const response = await generateResponse(sessionId, message, senderPhone)
+    const { message: responseText, toolCalls } = await generateResponse(sessionId, message, senderPhone)
     const conv = conversations.get(sessionId)
     const handoffActive = conv?.humanHandoffActive ?? false
 
-    return NextResponse.json({ response, handoffActive })
+    return NextResponse.json({ response: responseText, toolCalls, handoffActive })
     
   } catch (error) {
     console.error('API Error:', error)

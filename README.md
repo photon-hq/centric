@@ -325,10 +325,11 @@ When a customer says a handoff keyword (configurable in `company.json`), the age
 **Setup:**
 
 1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps)
-2. Enable **Socket Mode** and generate an **App-Level Token** (scope: `connections:write`)
-3. Add these **Bot Token Scopes**: `chat:write`, `channels:history`, `channels:join`
-4. Install the app to your workspace
-5. Add environment variables:
+2. In the left sidebar → **Socket Mode** → enable it
+3. In the left sidebar → **Basic Information** → scroll to **App-Level Tokens** → click **Generate Token and Scopes**, add scope `connections:write`, copy the token (`xapp-...`) ,  this is your `SLACK_APP_TOKEN`
+4. In the left sidebar → **OAuth & Permissions** → scroll to **Bot Token Scopes** → add: `chat:write`, `channels:history`, `channels:join`
+5. Click **Install to Workspace** at the top of the OAuth & Permissions page, then copy the **Bot User OAuth Token** (`xoxb-...`) ,  this is your `SLACK_BOT_TOKEN`
+6. Add environment variables:
 
 ```env
 SLACK_BOT_TOKEN=xoxb-...
@@ -336,7 +337,7 @@ SLACK_APP_TOKEN=xapp-...
 SLACK_CHANNEL_ID=C0XXXXXXXXX
 ```
 
-6. In `config/company.json`, set `humanHandoff.slackEnabled: true` and `humanHandoff.slackChannelId`
+7. In `config/company.json`, set `humanHandoff.slackEnabled: true` and `humanHandoff.slackChannelId`
 
 ---
 

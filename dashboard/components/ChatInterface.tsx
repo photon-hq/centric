@@ -2,21 +2,73 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { COMPANY_CONFIG } from '@/config/company'
-import { 
-  ShoppingBag, 
-  DollarSign, 
-  Rocket, 
-  Gift, 
+import {
+  ShoppingBag,
+  DollarSign,
+  Rocket,
+  Gift,
   Send,
-  RotateCcw
+  RotateCcw,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  Wrench
 } from 'lucide-react'
 
 import PhotonLogo from './PhotonLogo'
+
+interface ToolCallRecord {
+  name: string
+  args: Record<string, any>
+  result: string
+  isKbSearch: boolean
+}
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  toolCalls?: ToolCallRecord[]
+}
+
+function ToolCallBadge({ call }: { call: ToolCallRecord }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const label = call.isKbSearch
+    ? `search_knowledge_base("${call.args.query ?? ''}")`
+    : `${call.name}(${Object.entries(call.args).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ')})`
+
+  let resultPreview = call.result
+  try {
+    const parsed = JSON.parse(call.result)
+    resultPreview = JSON.stringify(parsed, null, 2)
+  } catch { /* already a string */ }
+
+  return (
+    <div className="text-[10px] font-mono rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors ${
+          call.isKbSearch
+            ? 'text-indigo-600 hover:bg-indigo-50'
+            : 'text-amber-700 hover:bg-amber-50'
+        }`}
+      >
+        {call.isKbSearch
+          ? <Search className="w-2.5 h-2.5 shrink-0" />
+          : <Wrench className="w-2.5 h-2.5 shrink-0" />}
+        <span className="truncate flex-1">{label}</span>
+        {expanded
+          ? <ChevronDown className="w-2.5 h-2.5 shrink-0 opacity-50" />
+          : <ChevronRight className="w-2.5 h-2.5 shrink-0 opacity-50" />}
+      </button>
+      {expanded && (
+        <pre className="px-2.5 py-2 text-gray-600 whitespace-pre-wrap break-all border-t border-gray-200 bg-white max-h-48 overflow-y-auto leading-relaxed">
+          {resultPreview}
+        </pre>
+      )}
+    </div>
+  )
 }
 
 const DEFAULT_TEST_PHONE = '+1 (555) 000-0001'
@@ -118,7 +170,8 @@ export default function ChatInterface() {
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.response,
-        timestamp: new Date()
+        timestamp: new Date(),
+        toolCalls: data.toolCalls ?? []
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -184,8 +237,16 @@ export default function ChatInterface() {
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
           >
+            {/* Tool call badges ,  only for assistant messages */}
+            {message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0 && (
+              <div className="w-full max-w-[85%] mb-1.5 space-y-1">
+                {message.toolCalls.map((call, i) => (
+                  <ToolCallBadge key={i} call={call} />
+                ))}
+              </div>
+            )}
             <div
               className={`max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed shadow-sm ${
                 message.role === 'user'

@@ -128,15 +128,22 @@ function detectHumanHandoff(message: string, keywords: string[]): boolean {
 
 function detectProductInquiry(message: string, products: Product[]): Product | null {
   const msg = message.toLowerCase()
+
+  // Pass 1: match by full product name first (most specific ,  prevents "support" in
+  // "Premium Support Package" keywords from matching "Standard Support Package")
   for (const product of products) {
-    const keywords = [product.name.toLowerCase(), product.id, ...product.keywords]
+    const escaped = product.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(msg)) return product
+  }
+
+  // Pass 2: match by individual keywords (id + keyword list, not the name again)
+  for (const product of products) {
+    const keywords = [product.id, ...product.keywords]
     for (const keyword of keywords) {
-      // Use word-boundary matching to avoid "standard" matching "non-standard" or "understand"
       const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const wordBoundary = new RegExp(`\\b${escaped}\\b`, 'i')
       if (!wordBoundary.test(msg)) continue
 
-      // Skip if the keyword is preceded by a negation within 5 words
       const negationPattern = new RegExp(
         `\\b(no|not|don'?t|never|without|except|instead of|cancel|stop|avoid|skip|remove)\\b.{0,40}\\b${escaped}\\b`,
         'i'
@@ -407,14 +414,30 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
       { role: 'user', content: userContent }
     ]
 
-    const openAITools = mcpManager.getTools().length > 0 ? mcpManager.convertToOpenAIFormat() : undefined
+    const kbSearchTool: OpenAI.Chat.ChatCompletionTool = {
+      type: 'function',
+      function: {
+        name: 'search_knowledge_base',
+        description: 'Search the company knowledge base for product documentation, features, pricing, and support content. Use this when you need more detail than what is already in context.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'The search query' }
+          },
+          required: ['query']
+        }
+      }
+    }
+
+    const allTools: OpenAI.Chat.ChatCompletionTool[] = [kbSearchTool, ...mcpManager.convertToOpenAIFormat()]
 
     const completionOptions: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
       model: config.ai.model,
       messages,
       temperature: config.ai.temperature,
       max_completion_tokens: config.ai.maxTokens,
-      ...(openAITools ? { tools: openAITools, tool_choice: 'auto' as const } : {})
+      tools: allTools,
+      tool_choice: 'auto' as const
     }
 
     let assistantMessage = ''
@@ -437,13 +460,19 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
             } catch {
               functionArgs = {}
             }
-            logger.info({ toolName: functionName, args: functionArgs }, 'Executing MCP tool')
-            try {
-              const result = await mcpManager.executeTool(functionName, functionArgs)
-              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) })
-            } catch (error) {
-              logger.error({ error, toolName: functionName }, 'MCP tool execution failed')
-              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ success: false, error: String(error) }) })
+            if (functionName === 'search_knowledge_base') {
+              logger.info({ query: functionArgs.query }, 'Executing KB search')
+              const searchResult = await getRelevantContext(functionArgs.query ?? '', vectorStore)
+              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: searchResult })
+            } else {
+              logger.info({ toolName: functionName, args: functionArgs }, 'Executing MCP tool')
+              try {
+                const result = await mcpManager.executeTool(functionName, functionArgs)
+                messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) })
+              } catch (error) {
+                logger.error({ error, toolName: functionName }, 'MCP tool execution failed')
+                messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ success: false, error: String(error) }) })
+              }
             }
           }
         }
@@ -529,8 +558,19 @@ async function main() {
       }
     })
 
-    await slackNotifier.start()
-    logger.info({ channelId }, 'Slack notifier started')
+    try {
+      await slackNotifier.start()
+      logger.info({ channelId }, 'Slack notifier started')
+    } catch (error: any) {
+      const isTokenError = error?.code === 'slack_webapi_platform_error' || String(error?.message).includes('token')
+      logger.error(
+        { error: error?.message, code: error?.data?.error },
+        isTokenError
+          ? 'Slack token is invalid or expired ,  human handoff via Slack is disabled. Update SLACK_BOT_TOKEN/SLACK_APP_TOKEN and restart.'
+          : 'Failed to start Slack notifier ,  human handoff via Slack is disabled. Agent will continue without it.'
+      )
+      slackNotifier = null
+    }
   } else if (handoffConfig?.slackEnabled) {
     logger.warn('Slack handoff is enabled in config but SLACK_BOT_TOKEN, SLACK_APP_TOKEN, or channel ID is missing')
   }

@@ -74,9 +74,12 @@ export function generateSystemPrompt(
     ? `\n\nCUSTOMER CONTACT INFORMATION:\nThis customer is contacting you via iMessage from: ${safePhone}\nDo NOT ask them for their phone number ,  you already have it. Never request contact information you already know.`
     : ''
 
-  const toolCapabilities = hasMCPTools
-    ? '- Use available tools to look up account or order information when needed.'
-    : '- You do NOT have access to any account systems, databases, or customer records. Do not claim or imply that you can look anything up.'
+  const toolCapabilities = [
+    '- Use the `search_knowledge_base` tool to find detailed product documentation, feature lists, pricing, and support content whenever you need more information than what is already in context. Prefer calling it over saying "I don\'t know".',
+    hasMCPTools
+      ? '- Use the available account and action tools to look up customer data, order status, and execute operations like refunds or creating tickets.'
+      : '- You do NOT have access to account systems or customer records. Do not claim or imply that you can look anything up beyond the knowledge base.'
+  ].join('\n')
 
   return `
 COMPANY INFORMATION:
