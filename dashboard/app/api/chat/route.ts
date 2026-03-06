@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
-import { 
-  DocumentVectorStore, 
-  ProductCatalog, 
-  type Product, 
+import {
+  DocumentVectorStore,
+  ProductCatalog,
+  type Product,
   type NegotiableProduct,
-  generateSystemPrompt, 
-  generateContextPrompt, 
-  generateNegotiationResponse, 
-  generatePurchaseResponse, 
-  generateFixedPriceResponse, 
+  type ConversationState,
+  generateSystemPrompt,
+  generateContextPrompt,
+  generateNegotiationResponse,
+  generatePurchaseResponse,
+  generateFixedPriceResponse,
   generateErrorResponse,
+  generateGreeting,
   ConfigLoader,
   type LoadedConfig
 } from '@photon/core'
@@ -295,7 +297,7 @@ async function initialize() {
       // Fallback to a noop vector store so the API can still respond without docs
       vectorStore = {
         initialize: async () => {},
-        search: async (_q: string, _n: number = 3) => [] as any[],
+        search: async (_q: string, _n: number = 3, _m: number = 0) => [] as any[],
         getDocumentCount: () => 0
       } as unknown as DocumentVectorStore
       console.log('✅ Dashboard: Using fallback vector store (no embeddings available)')
@@ -340,19 +342,6 @@ async function waitForInitialization(timeoutMs: number = 6000): Promise<void> {
   ])
 }
 
-// Conversation state (in-memory for demo, could use Redis/DB for production)
-interface ConversationState {
-  messageHistory: Array<{ role: 'user' | 'assistant'; content: string }>
-  currentNegotiation?: {
-    productId: string
-    currentOffer: number
-  }
-  firstMessageShown: boolean
-  humanHandoffRequested: boolean
-  ticketClosed: boolean
-  ticketId: string
-}
-
 const conversations = new Map<string, ConversationState>()
 
 function newTicketState(): ConversationState {
@@ -360,6 +349,8 @@ function newTicketState(): ConversationState {
     messageHistory: [],
     firstMessageShown: false,
     humanHandoffRequested: false,
+    humanHandoffActive: false,
+    handoffCount: 0,
     ticketClosed: false,
     ticketId: crypto.randomUUID()
   }
@@ -400,7 +391,7 @@ async function getRelevantContext(query: string): Promise<string> {
   if (!vectorStore) return "No context available"
   
   try {
-    const results = await vectorStore.search(query, 3)
+    const results = await vectorStore.search(query, 3, config?.features.knowledgeBase.similarityThreshold ?? 0)
     
     if (results.length === 0) {
       return "No specific documentation found for this query."
@@ -458,34 +449,36 @@ async function handleNegotiation(
   message: string,
   product: NegotiableProduct
 ): Promise<string> {
-  if (!conversation.currentNegotiation) {
-    conversation.currentNegotiation = {
-      productId: product.id,
-      currentOffer: product.price
-    }
-  }
-  
-  const negotiation = conversation.currentNegotiation
-  
   if (!product.negotiable) {
     return generateFixedPriceResponse(product.name, product.price)
   }
-  
-  const discountPercentage = 0.15
+
+  if (!conversation.currentNegotiation) {
+    conversation.currentNegotiation = {
+      productId: product.id,
+      currentOffer: product.price,
+      negotiationRound: 1
+    }
+  }
+
+  const negotiation = conversation.currentNegotiation
+
+  const discountPercentage = config!.features.negotiation.defaultDiscount
   const offeredPrice = Math.max(
     product.lowestNegotiationPrice,
     Math.round(product.price * (1 - discountPercentage))
   )
-  
+
   negotiation.currentOffer = offeredPrice
   const discountPercent = Math.round(((product.price - offeredPrice) / product.price) * 100)
-  
+
   return generateNegotiationResponse(
     product.name,
     product.price,
     offeredPrice,
     product.features,
-    discountPercent
+    discountPercent,
+    config!.features.timeConstraints.offerValidityHours
   )
 }
 
@@ -506,7 +499,7 @@ async function generateResponse(
   if (!vectorStore) {
     vectorStore = {
       initialize: async () => {},
-      search: async (_q: string, _n: number = 3) => [] as any[],
+      search: async (_q: string, _n: number = 3, _m: number = 0) => [] as any[],
       getDocumentCount: () => 0
     } as unknown as DocumentVectorStore
   }
@@ -610,8 +603,7 @@ ${desc}`
 
   // Generate AI response with MCP tool support
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'system', content: contextPrompt },
+    { role: 'system', content: systemPrompt + '\n\n' + contextPrompt },
     ...conversation.messageHistory.map(msg => ({
       role: msg.role as 'user' | 'assistant',
       content: msg.content
@@ -622,8 +614,8 @@ ${desc}`
   const completionOptions: OpenAI.Chat.ChatCompletionCreateParams = {
     model: process.env.MODEL || 'gpt-5-mini',
     messages,
-    temperature: parseFloat(process.env.TEMPERATURE || '1'),
-    max_completion_tokens: parseInt(process.env.MAX_COMPLETION_TOKENS || '5000')
+    temperature: config!.ai.temperature,
+    max_completion_tokens: config!.ai.maxTokens
   }
   
   if (mcpEnabled && mcpTools.length > 0) {
@@ -651,7 +643,12 @@ ${desc}`
       for (const toolCall of choice.message.tool_calls) {
         if (toolCall.type === 'function') {
           const functionName = toolCall.function.name
-          const functionArgs = JSON.parse(toolCall.function.arguments)
+          let functionArgs: Record<string, any>
+          try {
+            functionArgs = JSON.parse(toolCall.function.arguments)
+          } catch {
+            functionArgs = {}
+          }
           
           console.log(`🔧 Dashboard: Executing MCP tool: ${functionName}`, functionArgs)
           
@@ -695,11 +692,15 @@ ${desc}`
     assistantMessage = sanitizeEmDashes("I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request.")
   }
   
+  let finalMessage = sanitizeEmDashes(assistantMessage)
+
   if (isFirstMessage) {
+    const greeting = generateGreeting(config!.company, true)
+    if (greeting) {
+      finalMessage = `${greeting}\n\n${finalMessage}`
+    }
     conversation.firstMessageShown = true
   }
-
-  const finalMessage = sanitizeEmDashes(assistantMessage)
 
   conversation.messageHistory.push({
     role: 'assistant',

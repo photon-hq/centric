@@ -1,0 +1,4 @@
+[submodule "packages/imessage-kit"]
+	path = packages/imessage-kit
+	url = https://github.com/photon-hq/imessage-kit.git
+	branch = main

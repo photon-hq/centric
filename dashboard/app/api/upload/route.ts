@@ -115,86 +115,95 @@ async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
   return response.choices[0].message.content || ''
 }
 
+async function processFile(file: File): Promise<{ fileName: string; originalName: string; type: string; message: string }> {
+  const safeBase = path.basename(file.name)
+  const fileExtension = path.extname(safeBase).toLowerCase()
+  const baseName = path.basename(safeBase, fileExtension)
+
+  const isTextFile = ALLOWED_TEXT_EXTENSIONS.includes(fileExtension)
+  const isImageFile = ALLOWED_IMAGE_EXTENSIONS.includes(fileExtension)
+  const isPDFFile = ALLOWED_PDF_EXTENSIONS.includes(fileExtension)
+
+  if (!isTextFile && !isImageFile && !isPDFFile) {
+    throw new Error(`Unsupported file type: ${fileExtension}. Supported types: ${[...ALLOWED_TEXT_EXTENSIONS, ...ALLOWED_IMAGE_EXTENSIONS, ...ALLOWED_PDF_EXTENSIONS].join(', ')}`)
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+
+  let textContent: string
+  let finalFileName: string
+
+  if (isTextFile) {
+    textContent = buffer.toString('utf-8')
+    finalFileName = `uploaded_${safeBase}`
+  } else if (isImageFile) {
+    console.log(`Extracting text from image: ${safeBase}`)
+    const mimeType = file.type || 'image/jpeg'
+    textContent = await extractTextFromImage(buffer, mimeType)
+    textContent = `# ${baseName}\n\nSource: Uploaded image (${safeBase})\nExtracted using OpenAI Vision\n\n${textContent}`
+    finalFileName = `uploaded_${baseName}.md`
+  } else {
+    console.log(`Extracting text from PDF: ${safeBase}`)
+    textContent = await extractTextFromPDF(buffer)
+    textContent = `# ${baseName}\n\nSource: Uploaded PDF (${safeBase})\nExtracted using OpenAI\n\n${textContent}`
+    finalFileName = `uploaded_${baseName}.md`
+  }
+
+  const filePath = path.join(DOCUMENTS_DIR, finalFileName)
+  await writeFile(filePath, textContent, 'utf-8')
+  console.log(`✅ File uploaded and processed: ${finalFileName}`)
+
+  return {
+    fileName: finalFileName,
+    originalName: safeBase,
+    type: isTextFile ? 'text' : isImageFile ? 'image' : 'pdf',
+    message: isTextFile ? 'Text file uploaded successfully' : `Content extracted from ${isImageFile ? 'image' : 'PDF'} and saved as markdown`
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    const file = formData.get('file') as File
-    
-    if (!file) {
+    const files = formData.getAll('file') as File[]
+
+    if (!files || files.length === 0) {
       return NextResponse.json(
         { error: 'No file provided' },
         { status: 400 }
       )
     }
 
-    const fileName = file.name
-    const fileExtension = path.extname(fileName).toLowerCase()
-    const baseName = path.basename(fileName, fileExtension)
-    
-    // Validate file type
-    const isTextFile = ALLOWED_TEXT_EXTENSIONS.includes(fileExtension)
-    const isImageFile = ALLOWED_IMAGE_EXTENSIONS.includes(fileExtension)
-    const isPDFFile = ALLOWED_PDF_EXTENSIONS.includes(fileExtension)
-    
-    if (!isTextFile && !isImageFile && !isPDFFile) {
-      return NextResponse.json(
-        { error: `Unsupported file type: ${fileExtension}. Supported types: ${[...ALLOWED_TEXT_EXTENSIONS, ...ALLOWED_IMAGE_EXTENSIONS, ...ALLOWED_PDF_EXTENSIONS].join(', ')}` },
-        { status: 400 }
-      )
-    }
-
-    // Ensure documents directory exists
     await mkdir(DOCUMENTS_DIR, { recursive: true })
 
-    // Read file content
-    const buffer = Buffer.from(await file.arrayBuffer())
-    
-    let textContent: string
-    let finalFileName: string
+    const results = []
+    const errors = []
 
-    if (isTextFile) {
-      // Text file - just read and save
-      textContent = buffer.toString('utf-8')
-      finalFileName = `uploaded_${fileName}`
-    } else if (isImageFile) {
-      // Image file - use OpenAI Vision to extract text
-      console.log(`Extracting text from image: ${fileName}`)
-      const mimeType = file.type || 'image/jpeg'
-      textContent = await extractTextFromImage(buffer, mimeType)
-      
-      // Add metadata header
-      textContent = `# ${baseName}\n\nSource: Uploaded image (${fileName})\nExtracted using OpenAI Vision\n\n${textContent}`
-      finalFileName = `uploaded_${baseName}.md`
-    } else if (isPDFFile) {
-      // PDF file - extract text
-      console.log(`Extracting text from PDF: ${fileName}`)
-      textContent = await extractTextFromPDF(buffer)
-      
-      // Add metadata header
-      textContent = `# ${baseName}\n\nSource: Uploaded PDF (${fileName})\nExtracted using OpenAI\n\n${textContent}`
-      finalFileName = `uploaded_${baseName}.md`
-    } else {
+    for (const file of files) {
+      try {
+        results.push(await processFile(file))
+      } catch (err: any) {
+        errors.push({ file: path.basename(file.name), error: err.message })
+      }
+    }
+
+    if (results.length === 0) {
       return NextResponse.json(
-        { error: 'Unsupported file type' },
+        { error: 'All files failed to process', details: errors },
         { status: 400 }
       )
     }
 
-    // Save to documents folder
-    const filePath = path.join(DOCUMENTS_DIR, finalFileName)
-    await writeFile(filePath, textContent, 'utf-8')
-    
-    console.log(`✅ File uploaded and processed: ${finalFileName}`)
-
+    const singleResult = results[0]
     return NextResponse.json({
       success: true,
-      fileName: finalFileName,
-      originalName: fileName,
-      type: isTextFile ? 'text' : isImageFile ? 'image' : 'pdf',
-      extractedText: textContent.length > 500 ? textContent.substring(0, 500) + '...' : textContent,
-      message: isTextFile 
-        ? 'Text file uploaded successfully'
-        : `Content extracted from ${isImageFile ? 'image' : 'PDF'} and saved as markdown`
+      fileName: singleResult.fileName,
+      originalName: singleResult.originalName,
+      type: singleResult.type,
+      files: results,
+      errors: errors.length > 0 ? errors : undefined,
+      message: results.length === 1
+        ? singleResult.message
+        : `Successfully processed ${results.length} file(s)${errors.length > 0 ? ` (${errors.length} failed)` : ''}`
     })
 
   } catch (error: any) {

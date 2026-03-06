@@ -1,692 +1,603 @@
-# AI Customer Support Agent 🤖💬
+# Photon Customer Support
 
-An intelligent, **configurable** iMessage-based customer support agent powered by AI with document-based knowledge retrieval (RAG), product sales capabilities, and price negotiation. 
+An AI-powered customer support platform built for iMessage. Responds to customer texts automatically, looks up orders and accounts via MCP tools, negotiates pricing, escalates to human agents in Slack, and builds its knowledge base from your website or uploaded documents.
 
-**Industry-Agnostic**: Easily adapt this agent for any business - e-commerce, SaaS, healthcare, consulting, and more. Simply edit the configuration files to match your company and products.
-
-**Current Configuration**: Customizable demo setup (see `config/examples/` for industry templates)
+**Works for any business.** Every aspect ,  company identity, products, pricing, SOPs, AI behavior, human handoff ,  is configured through JSON files. No code changes required to deploy for a new company.
 
 ---
 
-## ⚡ Quick Start (3 Steps)
+## What It Does
 
-Get your AI support agent running in minutes:
+- **Responds to iMessages** from customers, automatically, 24/7
+- **Web chat dashboard** for testing and configuration without a Mac or iMessage
+- **RAG knowledge base** ,  scrapes your website or accepts uploaded documents; AI answers from your content
+- **Product catalog** with fixed and negotiable pricing; handles discounts within configured limits
+- **Standard Operating Procedures (SOPs)** ,  inject step-by-step instructions the AI follows for specific scenarios
+- **MCP tool integration** ,  connect external APIs (order systems, CRMs, databases) so the AI can look things up in real time
+- **Human handoff to Slack** ,  detects escalation keywords, posts to a Slack channel, relays replies back to the customer, re-enables AI when the ticket is resolved
+- **Auto knowledge base updates** ,  scheduled re-scraping keeps content fresh
+- **GitHub scraping** ,  indexes your org's repos, members, and READMEs via the GitHub API
+
+---
+
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| macOS | Required for iMessage integration only. Dashboard works on any OS. |
+| [Bun](https://bun.sh) | `curl -fsSL https://bun.sh/install \| bash` |
+| OpenAI API key | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| iMessage signed in on Mac | Settings → Messages → enable iMessage |
+| Full Disk Access for your terminal | System Settings → Privacy & Security → Full Disk Access → add Terminal/IDE |
+
+Slack integration and GitHub scraping are optional.
+
+---
+
+## Quick Start
 
 ```bash
-# 1. Get the code
-git clone <repository>
+git clone <repository-url>
 cd PhotonCustomerSupport
 
-# 2. Start the setup
-./start.sh
-```
-
-That's it! The script will:
-- ✅ Help you set up your OpenAI API key
-- 🔧 Guide you through the setup wizard
-- 🌐 Launch an interactive dashboard
-- 📱 Let you deploy to iMessage with one click
-
-### What Happens Next?
-
-**First Run (Setup Mode)**:
-1. The dashboard opens to the setup wizard at `http://localhost:3000/config`
-2. Enter your website URL to automatically scrape and build your knowledge base
-3. Test the agent with the chat interface
-4. Click "Launch iMessage Agent" when ready to go live
-
-**Subsequent Runs**:
-- Dashboard opens at `http://localhost:3000` 
-- Chat interface ready for testing
-- One-click iMessage deployment
-
----
-
-## 🌐 Interactive Dashboard
-
-The dashboard provides everything you need in one place:
-
-### Features
-- **💬 Live Chat Testing**: Test your agent before deploying
-- **🔧 Setup Wizard**: Scrape your website to build knowledge base automatically
-- **📱 iMessage Control**: Start/stop iMessage integration with one click
-- **📊 Status Monitoring**: See agent uptime and status in real-time
-- **⚙️ Configuration**: Update settings anytime
-
-### Setup Wizard
-
-The automatic website scraper:
-- 🔍 Crawls your entire website automatically
-- 🌐 Optionally includes same-origin subdomains (e.g., `docs.example.com`)
-- 📄 Extracts clean text content from every page
-- 💾 Saves everything to your `documents/` folder
-- ⚡ Shows real-time progress
-- 🤖 AI automatically uses the scraped content
-
----
-
-## 🚀 Automatic Knowledge Base Scraper
-
-Build your knowledge base by scraping your website!
-- 🔍 Crawls your entire website automatically
-- 🌐 Optionally includes same-origin subdomains (e.g., `docs.example.com`, `platform.example.com`)
-- 📄 Extracts clean text content from every page
-- 💾 Saves everything to your `documents/` folder
-- ⚡ Shows real-time progress
-- 🤖 AI automatically uses the scraped content
-
-### How to Use the Scraper
-
-1. **Start the dashboard**:
-   ```bash
-   cd dashboard
-   ./start.sh
-   ```
-
-2. **Open the configuration page**: Navigate to `http://localhost:3000/config`
-
-3. **Enter your website URL**: e.g., `https://example.com`
-
-4. **Configure options**:
-   - ✅ **Include Same-Origin Subdomains**: Scrape `docs.example.com`, `blog.example.com`, etc.
-   - 🔢 **Max Crawl Depth**: How many link levels deep to follow (recommended: 2-5)
-
-5. **Click "Start Scraping"**: Watch real-time progress as it crawls your site
-
-6. **Done!**: All content is saved to `documents/scraped_*.md` files
-
-### Configuration File
-
-The scraper settings are saved in `config/scraper.config.json`:
-
-```json
-{
-  "/** NOTICE": "This file is AUTO-GENERATED by the dashboard",
-  "websiteUrl": "https://example.com",
-  "includeSameOriginSubdomains": true,
-  "maxDepth": 3,
-  "lastScraped": "2026-03-02T12:00:00.000Z",
-  "totalPages": 42
-}
-```
-
-**Special Comment Format**: The config file includes documentation comments using the `"/**"` key prefix, making it self-documenting while still being valid JSON.
-
-### Scraping Features
-
-- ✅ **Rate Limited**: Waits 500ms between requests to be respectful
-- ✅ **Smart Content Extraction**: Removes navigation, ads, and non-content elements
-- ✅ **Markdown Format**: Saves as clean, readable markdown files
-- ✅ **Preserves Manual Docs**: Only deletes `scraped_*` files when clearing
-- ✅ **Real-time Progress**: See which page is being scraped and total progress
-- ✅ **Automatic Cache**: Embeddings are cached for fast subsequent runs
-
-### Example Use Cases
-
-**E-commerce Store**:
-```
-Main site: https://shop.example.com
-Also scrapes: 
-  - docs.example.com (product guides)
-  - help.example.com (FAQs)
-  - blog.example.com (articles)
-```
-
-**SaaS Platform**:
-```
-Main site: https://myapp.com
-Also scrapes:
-  - docs.myapp.com (documentation)
-  - api.myapp.com (API reference)
-  - learn.myapp.com (tutorials)
-```
-
-**Healthcare Practice**:
-```
-Main site: https://wellcarehealth.com
-Also scrapes:
-  - patient.wellcarehealth.com (patient portal info)
-  - locations.wellcarehealth.com (office locations)
-```
-
-### Managing Scraped Content
-
-- **View scraped files**: Check `documents/` folder for `scraped_*.md` files
-- **Clear scraped content**: Use the "Clear All Scraped Documents" button in the dashboard
-- **Manual documents**: Files without `scraped_` prefix are never deleted automatically
-- **Re-scrape**: Run the scraper again to update content (overwrites old scraped files)
-
-### Troubleshooting
-
-**Scraper not finding pages?**
-- Increase max crawl depth
-- Check if pages are linked from the homepage
-- Verify subdomain toggle is enabled if needed
-
-**Content quality issues?**
-- Some sites with heavy JavaScript may not scrape well
-- Try scraping a documentation site or static site for best results
-- Manual documents can supplement scraped content
-
-**Rate limiting errors?**
-- The scraper waits 500ms between requests
-- Some sites may have stricter limits - try reducing max depth
-- Consider spreading scraping across multiple sessions
-
-## Features ✨
-
-### 🎯 Core Capabilities
-- **AI-Powered Responses**: Uses GPT-4o to provide helpful, professional tax support
-- **Document Knowledge Base**: RAG (Retrieval Augmented Generation) with semantic search across your tax documentation
-- **Product Catalog**: Built-in product management with fixed and negotiable pricing
-- **Price Negotiation**: Intelligent negotiation with configurable min/max price ranges
-- **Conversation Memory**: Maintains context across multiple messages
-- **iMessage Integration**: Native Apple Messages support via imessage-kit
-
-### 📚 Knowledge Base
-The agent searches through your `documents/` folder to provide accurate, source-based answers:
-- Tax filing guidelines
-- FAQs and common questions
-- Deadline information
-- Service descriptions
-- Policy documentation
-
-Supports: `.txt`, `.md`, `.markdown` files (PDF support coming soon)
-
-### 🛍️ Product Management
-Pre-configured tax services with:
-- **Fixed-price products**: Set prices that cannot be negotiated
-- **Negotiable products**: Flexible pricing with starting price and minimum acceptable price
-- **Automatic product detection**: Recognizes when customers inquire about specific services
-- **Smart negotiation**: Offers discounts within approved ranges when customers express price concerns
-
-### 💰 Included Products
-1. **Individual Tax Filing** - $299 (negotiable down to $249)
-2. **Small Business Tax Package** - $799 (negotiable down to $649)
-3. **Tax Planning Consultation** - $249 (negotiable down to $199)
-4. **Tax Amendment** - $199 (fixed price)
-5. **Prior Year Return** - $349 (fixed price)
-6. **IRS Audit Defense** - $1,499 (fixed price)
-7. **Additional State Return** - $99 (fixed price)
-8. **Tax Extension Filing** - $49 (fixed price)
-
-## 🔧 Quick Start: Adapting for Your Company
-
-This agent is **fully configurable** for any industry. The default configuration is set up for TaxPro Tax Services, but you can easily adapt it:
-
-### Configuration Files
-- **`config/company.ts`**: Company details, greeting, policies
-- **`config/prompts.ts`**: AI prompt generation (auto-generated from company config)
-- **`lib/product-catalog.ts`**: Your products/services
-- **`documents/`**: Your company's knowledge base
-
-### Example Configurations
-See **[`config/examples/`](./config/examples/README.md)** for complete examples:
-- **E-commerce**: Online retail store with product catalog
-- **SaaS**: Subscription platform with plans and add-ons
-- **Healthcare**: Medical services with appointment scheduling
-
-### Quick Switch
-```bash
-# Use an example configuration
-cp config/examples/ecommerce-config.ts config/company.ts
-# Update products
-# Add your documents to documents/
-# Run: bun run start
-```
-
-See the **[Configuration Examples Guide](./config/examples/README.md)** for detailed instructions.
-
-## Prerequisites 📋
-
-### Required
-- **macOS**: This uses Apple Messages, so requires a Mac
-- **Node.js 18+** or **Bun**: For running the TypeScript code
-- **OpenAI API Key**: For GPT-4 and embeddings
-- **Full Disk Access**: Required for iMessage access
-
-### Granting Full Disk Access
-1. Open **System Settings → Privacy & Security → Full Disk Access**
-2. Click **"+"** and add your terminal or IDE (e.g., Terminal, Warp, VS Code, Cursor)
-3. Restart your terminal/IDE
-
-## Installation 🚀
-
-### 1. Clone and Install Dependencies
-
-```bash
-cd /path/to/PhotonCustomerSupport
+# Add your OpenAI key
+cp .env.example .env.local
+# Edit .env.local: OPENAI_API_KEY=sk-...
 
 # Install dependencies
 bun install
-# or
-npm install
+
+# Launch the dashboard (opens http://localhost:3000)
+./start.sh
 ```
 
-### 2. Set Up Environment Variables
+From the dashboard:
+1. Go to **Config → Knowledge Base** and paste your website URL, then click **Start Scraping**
+2. Edit **Config → Company** to set your business name, products, and SOPs
+3. Open the **Chat** tab and test your agent
+4. When satisfied, click **Launch iMessage Agent** to go live
 
-Create a `.env` file:
+---
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your OpenAI API key:
-
-```env
-OPENAI_API_KEY=sk-your-actual-openai-api-key-here
-```
-
-### 3. Add Your Documentation
-
-Place your tax documentation in the `documents/` folder:
-
-```bash
-# Sample documents are already included:
-documents/
-├── tax-filing-guide.md
-├── faqs.md
-└── deadlines.md
-
-# Add your own documents (txt, md, markdown)
-```
-
-The agent will automatically:
-- Load all documents
-- Split them into chunks
-- Generate embeddings (or load from cache)
-- Enable semantic search
-
-**Embeddings Cache:** The first time you run the agent, it will generate embeddings for all documents and cache them in the `embeddings/` folder. Subsequent runs will load from cache, making startup much faster and saving OpenAI API costs. The cache automatically invalidates when documents are modified.
-
-## Usage 🎮
-
-### Start the Agent
-
-```bash
-bun run start
-# or
-npm run start
-```
-
-You should see:
+## Repository Layout
 
 ```
-🚀 TaxPro Customer Support Agent Starting...
-
-📚 Loading documents and creating vector embeddings...
-   Loading documents from: ./documents
-   Found 3 documents
-   Loading embeddings from cache...
-   ✓ Loaded 15 cached embeddings
-   ✓ Total: 15 embedded documents
-✅ Loaded 15 documents
-
-🛍️  Available Products:
-   - Individual Tax Filing: $299 (negotiable)
-   - Small Business Tax Package: $799 (negotiable)
-   - Tax Planning Consultation: $249 (negotiable)
-   - Tax Amendment: $199
-   - Prior Year Return: $349
-   - IRS Audit Defense: $1499
-   - Additional State Return: $99
-   - Tax Extension Filing: $49
-
-👀 Starting message watcher...
-✨ Agent is ready! Waiting for customer messages...
+PhotonCustomerSupport/
+├── config/                     # All runtime configuration (JSON)
+│   ├── company.json            # Company identity, greeting, human handoff
+│   ├── products.json           # Product catalog with pricing
+│   ├── features.json           # Feature flags (negotiation, MCP, SOPs, KB)
+│   ├── ai.json                 # Model, temperature, token limits, embeddings
+│   ├── sops.json               # Standard Operating Procedures
+│   ├── mcp-config.json         # MCP server connections
+│   └── scraper.config.json     # Web scraper settings (auto-managed by dashboard)
+├── documents/                  # Knowledge base ,  add .txt or .md files here
+├── embeddings/                 # Auto-generated embedding cache (do not edit)
+├── packages/
+│   ├── agent/                  # iMessage agent (bun run packages/agent/src/index.ts)
+│   ├── core/                   # Shared library: config loader, vector store, MCP, prompts
+│   └── imessage-kit/           # iMessage SDK (polling, sending, AppleScript)
+├── dashboard/                  # Next.js web dashboard (port 3000)
+│   └── app/api/
+│       ├── chat/               # AI chat endpoint (same pipeline as iMessage agent)
+│       ├── scrape/             # Web scraper + auto-update scheduler
+│       ├── upload/             # File upload (txt, md, images via OCR, PDFs)
+│       ├── documents/          # Document list and management
+│       ├── config/             # Read/write config files
+│       ├── sops/               # SOP CRUD
+│       ├── mcp/                # MCP server management and tool testing
+│       ├── imessage/           # Start/stop iMessage agent from dashboard
+│       └── slack/              # Slack integration status
+├── local-test/                 # Local MCP test server for development
+│   ├── mcp-server.js           # Express MCP server with customer support tools
+│   └── verify.sh               # End-to-end MCP verification script
+└── .env.local                  # Your secrets (never commit)
 ```
 
-### Test the Agent
+---
 
-Send an iMessage to yourself or a test phone number:
+## Configuration
 
-```
-Example messages to try:
-- "What documents do I need to file my taxes?"
-- "How much does individual tax filing cost?"
-- "That's too expensive, can you do better?"
-- "I'll take it at $250"
-- "When is the tax deadline?"
-- "Do you help with business taxes?"
-```
+All configuration lives in `config/`. The dashboard provides a UI for all of these ,  you can also edit the JSON files directly.
 
-### Stop the Agent
+### Company (`config/company.json`)
 
-Press `Ctrl+C` to gracefully shut down.
-
-## Architecture 🏗️
-
-```
-support-agent.ts            # Main application
-├── OpenAI (GPT-4o)          # LLM for responses
-├── DocumentVectorStore      # RAG knowledge base
-│   └── OpenAI Embeddings    # Semantic search
-├── ProductCatalog           # Product management
-└── IMessageSDK              # iMessage integration
-
-lib/
-├── vector-store.ts          # Document loading & search
-└── product-catalog.ts       # Product definitions
-
-documents/                   # Knowledge base files
-├── tax-filing-guide.md
-├── faqs.md
-└── deadlines.md
-
-embeddings/                  # Cached embeddings (auto-generated)
-├── tax-filing-guide.md_chunk_0.json
-├── tax-filing-guide.md_chunk_1.json
-└── ... (one file per document chunk)
-```
-
-## How It Works 🔍
-
-### 1. Message Reception
-Agent watches for incoming iMessages using `imessage-kit`
-
-### 2. Context Gathering
-- **Conversation History**: Maintains last 10 messages per user
-- **Document Search**: Searches knowledge base for relevant information
-- **Product Detection**: Identifies if user is asking about a product
-
-### 3. AI Processing
-- Constructs prompt with:
-  - System instructions (personality, capabilities)
-  - Retrieved document context
-  - Product information (if relevant)
-  - Conversation history
-- Sends to GPT-4o for response generation
-
-### 4. Special Handling
-- **Negotiation Detection**: Recognizes price objections
-- **Purchase Intent**: Identifies when customer wants to buy
-- **Contextual Offers**: Provides discounts within configured ranges
-
-### 5. Response Delivery
-Sends AI-generated response back via iMessage
-
-## Configuration ⚙️
-
-### Company Configuration
-
-The agent is configured through **`config/company.ts`**:
-
-```typescript
-export const COMPANY_CONFIG: CompanyConfig = {
-  name: 'Your Company Name',
-  industry: 'Your Industry',
-  description: 'Brief description for UI',
-  greeting: 'AI greeting message customers will see',
-  supportedLanguages: ['en'],
-  features: [
-    'Feature 1',
-    'Feature 2',
-    'Feature 3'
+```json
+{
+  "name": "Acme Corp",
+  "industry": "E-commerce",
+  "description": "The best widgets on the internet",
+  "website": "https://acme.com",
+  "phone": "1-800-555-0100",
+  "email": "support@acme.com",
+  "agentName": "Max",
+  "features": [
+    "Order tracking and returns",
+    "Product recommendations",
+    "Billing support"
   ],
-  policies: {
-    returnPolicy: 'Your return/cancellation policy',
-    shippingPolicy: 'Your delivery/fulfillment policy',
-    warrantyPolicy: 'Your warranty/guarantee policy'
+  "greeting": {
+    "enabled": true,
+    "template": "Hi! I'm {agentName}, {companyName}'s AI assistant. How can I help you today?",
+    "showHumanEscalation": true
+  },
+  "humanHandoff": {
+    "enabled": true,
+    "keywords": ["human", "agent", "person", "manager", "representative"],
+    "message": "I'll connect you with a team member. Please hold on.",
+    "slackEnabled": false,
+    "slackChannelId": ""
   }
 }
 ```
 
-**Industry Examples Available:**
-- E-commerce (online retail)
-- SaaS (software platform)
-- Healthcare (medical services)
-- Tax Services (default)
-
-See **[`config/examples/`](./config/examples/README.md)** for complete examples.
-
-### Prompt Configuration
-
-Prompts are auto-generated in **`config/prompts.ts`** based on your company config:
-
-- `generateSystemPrompt()` - Main AI personality and instructions
-- `generateNegotiationResponse()` - Price negotiation handling
-- `generatePurchaseResponse()` - Purchase confirmation
-- `generateContextPrompt()` - RAG context integration
-- `generateErrorResponse()` - Error handling
-
-These adapt automatically when you change company config - no manual prompt editing needed!
-
-### LLM Configuration
-
-Edit `support-agent.ts` to adjust AI behavior:
-
-```typescript
-const config: AgentConfig = {
-    openaiApiKey: process.env.OPENAI_API_KEY || '',
-    model: 'gpt-4o',              // or 'gpt-4', 'gpt-3.5-turbo'
-    temperature: 1,              // 0-1 (lower = more focused)
-    maxTokens: 1000,               // Response length limit
-    debug: true                    // Enable/disable logging
-}
-```
-
-### Product Configuration
-
-Edit `lib/product-catalog.ts` to add your products/services:
-
-```typescript
-export const products = [
-  {
-    id: 'unique-id',
-    name: 'Product/Service Name',
-    description: 'Detailed description',
-    price: 199,
-    negotiable: true,              // or false for fixed pricing
-    lowestNegotiationPrice: 149,  // only if negotiable: true
-    category: 'Category Name',
-    features: [
-      'Feature 1',
-      'Feature 2',
-      'Feature 3'
-    ],
-    keywords: ['keyword1', 'keyword2']  // For product detection
-  },
-  // Add more products...
-]
-```
-
-**Negotiable vs Fixed Pricing:**
-- `negotiable: true` - Agent can offer discounts (specify `lowestNegotiationPrice`)
-- `negotiable: false` - Price is fixed, agent will not offer discounts
-
-**Negotiation Logic**: The agent offers up to 15% discount by default. Adjust this in `support-agent.ts` or `dashboard/app/api/chat/route.ts` if needed.
-
-### Knowledge Base Configuration
-
-Add your company documentation to `documents/`:
-
-```
-documents/
-├── company-overview.txt
-├── product-details.md
-├── policies.md
-├── faq.txt
-└── contact-info.md
-```
-
-Supported formats: `.txt`, `.md`, `.markdown`
-
-The agent will:
-1. Load all documents on startup
-2. Split into chunks (~1000 characters)
-3. Generate/cache embeddings (saves API costs)
-4. Enable semantic search for accurate answers
-
-## Advanced Features 🚀
-
-### Conversation State Management
-Each customer gets isolated conversation state:
-- Message history (last 10 messages)
-- Active negotiation state
-- Customer info
-
-### Smart Document Chunking
-Large documents are automatically:
-- Split into ~1000 character chunks
-- Split at sentence boundaries
-- Given overlap for context preservation
-
-### Embedding Cache Management
-Embeddings are automatically cached in the `embeddings/` folder:
-- **First run**: Generates embeddings for all documents (slower, uses OpenAI API)
-- **Subsequent runs**: Loads from cache (instant, free)
-- **Auto-invalidation**: Cache refreshes when documents are modified
-- **Manual cache clear**: Delete the `embeddings/` folder to regenerate all embeddings
-
-The cache stores:
-- Vector embeddings for each document chunk
-- Content hash for validation
-- Last modified timestamp
-- Document metadata
-
-This dramatically reduces startup time and OpenAI API costs for repeated runs.
-
-### Product Intelligence
-The agent can:
-- Detect product inquiries by name or keywords
-- Present pricing and features
-- Handle negotiation naturally
-- Process purchase confirmation
-
-### Error Handling
-Built-in fallbacks for:
-- Missing API keys
-- Document loading errors
-- OpenAI API failures
-- iMessage send failures
-
-## Monitoring & Debugging 📊
-
-### Logs
-The agent logs:
-- Incoming messages
-- Document search results
-- AI responses
-- Errors and warnings
-
-### Console Output
-```
-📱 Incoming message from +1234567890: "How much for tax filing?"
-✅ Sent response to +1234567890
-🤖 Response: "Our Individual Tax Filing service is $299..."
-```
-
-### Debug Mode
-Enable detailed logging:
-
-```typescript
-const sdk = new IMessageSDK({ debug: true })
-```
-
-## Future Enhancements 🔮
-
-- [ ] **Human Handoff**: Transfer complex queries to human agent
-- [ ] **Multi-language Support**: Spanish, Chinese, etc.
-- [ ] **PDF Document Support**: Extract text from PDFs
-- [ ] **Appointment Scheduling**: Book consultation times
-- [ ] **Payment Processing**: Accept payments through chat
-- [ ] **CRM Integration**: Sync with Salesforce, HubSpot
-- [ ] **Analytics Dashboard**: Track conversations, conversions
-- [ ] **A/B Testing**: Test different prompts and strategies
-
-## Troubleshooting 🔧
-
-### "Cannot read iMessage database"
-→ Grant Full Disk Access to your terminal/IDE (see Prerequisites)
-
-### "OPENAI_API_KEY is required"
-→ Create `.env` file with your OpenAI API key
-
-### "No documents found"
-→ Add `.txt` or `.md` files to `documents/` folder
-
-### Messages not being received
-→ Ensure agent is running and check console for errors
-
-### Poor response quality
-→ Adjust temperature, add more documentation, or improve system prompt
-
-### Negotiation not working
-→ Check product has `negotiable: true` and `lowestNegotiationPrice` set
-
-### Embeddings not updating after document changes
-→ Delete the `embeddings/` folder to force regeneration: `rm -rf embeddings/`
-
-### Slow first startup
-→ This is normal! Generating embeddings for all documents takes time. Subsequent runs will be instant using the cache.
-
-## Best Practices 💡
-
-### Documentation
-- **Be comprehensive**: More documentation = better answers
-- **Stay organized**: Use clear headings and structure
-- **Keep updated**: Refresh docs when policies change
-- **Chunk wisely**: Break very long docs into separate files
-
-### Product Catalog
-- **Clear descriptions**: Help AI understand what to recommend
-- **Relevant keywords**: Better product detection
-- **Reasonable ranges**: Don't negotiate more than 20-25% off
-- **Bundle opportunities**: Offer related products together
-
-### System Prompt
-- **Define personality**: Professional, friendly, helpful
-- **Set boundaries**: What agent can and can't do
-- **Provide examples**: Show how to handle common scenarios
-- **Update iteratively**: Refine based on real conversations
-
-### Monitoring
-- **Review conversations**: Look for improvement opportunities
-- **Track metrics**: Response time, customer satisfaction
-- **Test regularly**: Send test messages to verify behavior
-- **Update knowledge**: Add FAQs based on actual questions
-
-## Security & Privacy 🔒
-
-- **API Keys**: Store in `.env`, never commit to git
-- **Customer Data**: Conversation history stored in memory only
-- **iMessage Access**: Requires Full Disk Access (be cautious)
-- **OpenAI Privacy**: Review OpenAI's data usage policies
-- **Local Processing**: Documents processed locally before embedding
-
-## Contributing 🤝
-
-To extend this agent:
-
-1. **Create new industry configs** in `config/examples/`
-2. **Add new features** to `support-agent.ts`
-3. **Enhance vector store** in `lib/vector-store.ts`
-4. **Add prompt generators** in `config/prompts.ts`
-5. **Share your configuration** via pull request
-
-We welcome example configs for new industries!
-
-## License 📄
-
-This project uses:
-- `@photon-ai/imessage-kit` (MIT License)
-- `openai` (MIT License)
-
-## Support 💬
-
-Questions or issues?
-- Check the troubleshooting section
-- Review [Configuration Examples](./config/examples/README.md)
-- Review imessage-kit documentation
-- Open an issue on GitHub
-
-## Credits 🙏
-
-Built with:
-- [@photon-ai/imessage-kit](https://github.com/photon-hq/imessage-kit) - iMessage SDK
-- [OpenAI API](https://openai.com) - GPT-4 & Embeddings
-- [Bun](https://bun.sh) - Fast TypeScript runtime
+| Field | Description |
+|---|---|
+| `agentName` | The name the AI introduces itself as |
+| `greeting.template` | Supports `{agentName}` and `{companyName}` variables |
+| `greeting.showHumanEscalation` | Appends "say so if you'd like a human" to the greeting |
+| `humanHandoff.keywords` | Any message containing one of these triggers handoff |
+| `humanHandoff.slackEnabled` | Set `true` to post handoffs to Slack |
+| `humanHandoff.slackChannelId` | The Slack channel ID to post handoffs to |
 
 ---
 
-**AI Customer Support Agent** - Intelligent, configurable customer support for any industry 🎯
+### Products (`config/products.json`)
+
+```json
+{
+  "products": [
+    {
+      "id": "pro-plan",
+      "name": "Pro Plan",
+      "description": "Full access to all features",
+      "price": 299,
+      "negotiable": true,
+      "lowestNegotiationPrice": 249,
+      "features": ["Unlimited usage", "Priority support", "API access"],
+      "keywords": ["pro", "premium", "full"]
+    },
+    {
+      "id": "basic-plan",
+      "name": "Basic Plan",
+      "description": "Core features for small teams",
+      "price": 99,
+      "negotiable": false,
+      "features": ["Up to 5 users", "Email support"],
+      "keywords": ["basic", "starter", "small"]
+    }
+  ]
+}
+```
+
+- `negotiable: true` ,  agent will offer discounts up to `defaultDiscount` (set in `features.json`)
+- `lowestNegotiationPrice` ,  floor; agent will never offer below this
+- `keywords` ,  words in a customer message that trigger this product's context
+
+---
+
+### Feature Flags (`config/features.json`)
+
+```json
+{
+  "negotiation": {
+    "enabled": true,
+    "defaultDiscount": 0.15,
+    "maxDiscount": 0.25
+  },
+  "mcp": {
+    "enabled": true
+  },
+  "sops": {
+    "enabled": true,
+    "autoLoad": true
+  },
+  "knowledgeBase": {
+    "enabled": true,
+    "documentsPath": "./documents",
+    "maxResults": 5,
+    "similarityThreshold": 0.7
+  },
+  "timeConstraints": {
+    "offerValidityHours": 24,
+    "responseTimeMinutes": 60
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `negotiation.defaultDiscount` | Fraction offered (0.15 = 15% off) |
+| `knowledgeBase.similarityThreshold` | Minimum cosine similarity for RAG results (0, 1). Raise to reduce noise. |
+| `knowledgeBase.maxResults` | How many document chunks are injected into the prompt |
+| `timeConstraints.offerValidityHours` | How long a quoted price is valid |
+
+---
+
+### AI Model (`config/ai.json`)
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "temperature": 1,
+  "maxTokens": 5000,
+  "embeddingModel": "text-embedding-3-small",
+  "embeddingDimensions": 1536
+}
+```
+
+Any value here can be overridden with an environment variable: `MODEL`, `TEMPERATURE`, `MAX_COMPLETION_TOKENS`, `EMBEDDING_MODEL`.
+
+---
+
+### SOPs (`config/sops.json`)
+
+SOPs are step-by-step instructions injected into the system prompt. The AI is instructed to follow them when the trigger condition matches.
+
+```json
+{
+  "sops": [
+    {
+      "id": "sop-returns-001",
+      "title": "Returns & Refunds SOP",
+      "objective": "Process return requests without making promises the policy doesn't support.",
+      "trigger": "Customer asks to return a product or get a refund.",
+      "steps": [
+        "Ask which order they'd like to return.",
+        "Call check_return_window({order_id}) to verify eligibility.",
+        "If eligible: call process_refund({order_id, reason}) and share the refund ID.",
+        "If ineligible: explain the 30-day window has passed and offer 20% store credit instead."
+      ],
+      "enabled": true
+    }
+  ]
+}
+```
+
+SOPs are most powerful when they reference MCP tool names by exact name (e.g., `check_return_window`), so the AI knows which tools to call in which order.
+
+---
+
+### MCP Tool Integration (`config/mcp-config.json`)
+
+MCP (Model Context Protocol) lets you connect any external API ,  order management, CRMs, databases ,  so the AI can look up real data instead of hallucinating.
+
+```json
+{
+  "enabled": true,
+  "servers": [
+    {
+      "id": "my-backend",
+      "name": "My Backend API",
+      "url": "https://api.yourcompany.com/mcp",
+      "apiKey": "your-api-key-here",
+      "type": "sse",
+      "enabled": true
+    }
+  ]
+}
+```
+
+**Your MCP server must expose:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/tools` | GET | Returns `{ tools: [...] }` ,  list of available tools |
+| `/call` | POST | Accepts `{ tool, parameters }` ,  executes a tool and returns result |
+
+Each tool definition:
+```json
+{
+  "name": "get_order_status",
+  "description": "Get order status by order ID",
+  "parameters": {
+    "order_id": {
+      "type": "string",
+      "description": "The order ID (e.g. ORD-12345)",
+      "required": true
+    }
+  }
+}
+```
+
+The dashboard includes a live **MCP Connector** UI for adding, testing, and toggling servers. Use `local-test/mcp-server.js` as a starting point ,  it implements all the expected endpoints with mock customer support data.
+
+**Testing your MCP server locally:**
+```bash
+cd local-test
+npm install
+node mcp-server.js &   # starts on port 3100
+bash verify.sh          # runs 29 automated checks
+```
+
+---
+
+### Slack Human Handoff
+
+When a customer says a handoff keyword (configurable in `company.json`), the agent:
+1. Posts a summary of the conversation to the configured Slack channel
+2. Pauses AI responses ,  subsequent customer messages relay to the Slack thread
+3. Human agents reply in the Slack thread to respond to the customer
+4. When the human types `/resolve` in the Slack thread, AI re-enables for that customer
+
+**Setup:**
+
+1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Enable **Socket Mode** and generate an **App-Level Token** (scope: `connections:write`)
+3. Add these **Bot Token Scopes**: `chat:write`, `channels:history`, `channels:join`
+4. Install the app to your workspace
+5. Add environment variables:
+
+```env
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...
+SLACK_CHANNEL_ID=C0XXXXXXXXX
+```
+
+6. In `config/company.json`, set `humanHandoff.slackEnabled: true` and `humanHandoff.slackChannelId`
+
+---
+
+## Knowledge Base
+
+### Website Scraping
+
+The dashboard can scrape your website and convert every page into a searchable markdown document.
+
+1. Go to **Config → Knowledge Base** in the dashboard
+2. Enter your website URL
+3. Optionally enable **Include Same-Origin Subdomains** (e.g., `docs.yoursite.com`)
+4. Set **Max Depth** (2, 5 recommended)
+5. Click **Start Scraping**
+
+For GitHub organizations, paste the GitHub org URL (e.g., `https://github.com/your-org`). The scraper uses the GitHub API to fetch repo metadata, members, and READMEs ,  not raw file contents.
+
+```
+GITHUB_TOKEN=ghp_...   # optional, increases rate limit from 60 to 5000 req/hr
+```
+
+**Auto-updates:** Enable **Auto Update** in the dashboard to re-scrape on a schedule (5 minutes to 24 hours).
+
+### Document Upload
+
+Upload files directly from the **Config → Upload Documents** section:
+
+| Type | Handling |
+|---|---|
+| `.txt`, `.md`, `.markdown` | Saved as-is |
+| `.jpg`, `.png`, `.gif`, `.webp` | Text extracted via OpenAI Vision |
+| `.pdf` | Text extracted via OpenAI Vision |
+
+### Manual Documents
+
+Drop `.txt` or `.md` files directly into the `documents/` folder. The agent picks them up automatically on next start or re-initialization.
+
+Files prefixed with `scraped_` are managed by the scraper. All other files are preserved when scraping is cleared.
+
+---
+
+## Environment Variables
+
+Create `.env.local` in the project root (copy from `.env.example`):
+
+```env
+# Required
+OPENAI_API_KEY=sk-...
+
+# Optional ,  override config/ai.json values
+MODEL=gpt-5-mini
+TEMPERATURE=1
+MAX_COMPLETION_TOKENS=5000
+
+# Optional ,  Slack human handoff
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...
+SLACK_CHANNEL_ID=C0XXXXXXXXX
+
+# Optional ,  GitHub scraping (increases API rate limit)
+GITHUB_TOKEN=ghp_...
+```
+
+The dashboard also reads from `dashboard/.env.local` for `NEXT_PUBLIC_*` display variables. These are cosmetic only.
+
+---
+
+## Running the System
+
+### Option A: Dashboard only (recommended to start)
+
+```bash
+./start.sh
+```
+
+Opens the dashboard at `http://localhost:3000`. Use the chat interface to test the AI. No iMessage or macOS required.
+
+### Option B: iMessage agent only
+
+```bash
+bun run packages/agent/src/index.ts
+```
+
+Starts the iMessage watcher. Requires macOS with iMessage signed in and Full Disk Access granted to your terminal.
+
+### Option C: Both together
+
+Run in two separate terminals:
+
+```bash
+# Terminal 1 ,  dashboard
+./start.sh
+
+# Terminal 2 ,  iMessage agent
+bun run packages/agent/src/index.ts
+```
+
+Or use the **Launch iMessage Agent** button in the dashboard to start the agent as a background process.
+
+### Development (hot reload)
+
+```bash
+# Agent with watch
+bun --watch packages/agent/src/index.ts
+
+# Dashboard
+cd dashboard && bun dev
+```
+
+---
+
+## Architecture
+
+```
+Customer iMessage
+       │
+       ▼
+packages/agent/src/index.ts
+       │
+       ├─── IMessageSDK (polling macOS Messages DB)
+       │
+       ├─── SenderQueue (debounce rapid-fire messages, 1.5s window)
+       │
+       ├─── ConversationState (per-phone-number: history, negotiation, handoff status)
+       │
+       ├─── Human handoff check → SlackNotifier (if keywords detected)
+       │         └── relay customer messages to Slack thread
+       │         └── relay human Slack replies back to iMessage
+       │         └── /resolve command re-enables AI
+       │
+       ├─── Product detection + price negotiation (local, no LLM needed)
+       │
+       ├─── RAG: DocumentVectorStore.search(query, topK, minSimilarity)
+       │         └── text-embedding-3-small embeddings, cached in embeddings/
+       │
+       ├─── System prompt = generateSystemPrompt(company, SOPs, features, phone, hasMCPTools)
+       │
+       └─── OpenAI chat completions (5-iteration MCP tool loop)
+                 ├─── Tool calls → MCPManager.executeTool(name, params) → your API
+                 └─── Final text response → sanitizeEmDashes() → sdk.send()
+
+dashboard/app/api/chat/route.ts
+       └── Identical pipeline (same config, same tool loop, same em-dash sanitization)
+```
+
+### Key Design Decisions
+
+**Both surfaces share one pipeline.** The iMessage agent and dashboard chat API use identical logic: same system prompt, same MCP tool loop (5 iterations), same negotiation math, same greeting, same em-dash sanitization. You can test everything in the browser before deploying to iMessage.
+
+**Config-driven, not code-driven.** Every behavioral parameter ,  discounts, timeouts, keywords, SOPs, model ,  is in `config/*.json`. Operators change behavior without touching TypeScript.
+
+**Empty message guard.** iMessage delivers tapbacks, stickers, and attachment-only messages as empty text. The agent discards these before doing any processing.
+
+**Debounced queue.** Rapid-fire messages from the same sender are batched with a 1.5-second debounce and processed as one turn, preventing duplicate AI calls.
+
+**Embeddings cache.** Embeddings are stored in `embeddings/` alongside a content hash. On startup, unchanged documents load from cache (fast, no API cost). Modified documents regenerate automatically.
+
+**handoffCount guard.** `handoffCount` only increments if the Slack post actually succeeds (returns a thread timestamp). Failed Slack posts don't count as handoffs.
+
+**Stale negotiation cleared on resolve.** When a human resolves a Slack handoff, `currentNegotiation` is cleared so the returning AI doesn't pick up a stale offer from before the human intervened.
+
+---
+
+## Customizing for Your Business
+
+### Minimal setup (15 minutes)
+
+1. Edit `config/company.json` ,  name, industry, description, agent name, greeting
+2. Edit `config/products.json` ,  your actual products/services with real pricing
+3. Run `./start.sh`, go to Config, scrape your website
+4. Test in chat, launch iMessage
+
+### With custom SOPs
+
+Add entries to `config/sops.json`. Name the MCP tools explicitly in the steps if you want the AI to call them in a specific order.
+
+### With MCP tools
+
+1. Build or deploy an MCP server that exposes `/tools` (GET) and `/call` (POST)
+2. Add it to `config/mcp-config.json`
+3. Reference tool names in your SOPs
+4. Test with the MCP Connector in the dashboard
+
+Use `local-test/mcp-server.js` as a template. It provides `lookup_customer`, `get_order_status`, `check_return_window`, `process_refund`, `log_bug_report`, and `create_ticket` with realistic mock data.
+
+### With Slack handoff
+
+Follow the Slack setup steps above. No code changes ,  just environment variables and `company.json`.
+
+### Changing the AI model
+
+Edit `config/ai.json` or set the `MODEL` environment variable. The system uses whatever model you specify.
+
+---
+
+## Testing
+
+### Pipeline test (no iMessage required)
+
+```bash
+cd local-test && node mcp-server.js &    # start MCP server
+bun run local-test/pipeline-test.ts      # simulate 9 iMessage scenarios
+```
+
+Tests: empty message guard, greeting, em-dash sanitization, human handoff, price negotiation, MCP `get_order_status`, MCP `lookup_customer`, MCP refund flow, stale negotiation cleared on resolve, handoffCount guard.
+
+### MCP server verification
+
+```bash
+cd local-test && node mcp-server.js &
+bash local-test/verify.sh               # 29 automated tool checks
+```
+
+### iMessage-kit unit tests
+
+```bash
+cd packages/imessage-kit
+bun test
+```
+
+---
+
+## Troubleshooting
+
+**"Cannot read iMessage database"**
+→ Grant Full Disk Access to your terminal or IDE. System Settings → Privacy & Security → Full Disk Access → add Terminal (or Cursor, VS Code, etc.). Restart after granting.
+
+**"OPENAI_API_KEY is required"**
+→ Create `.env.local` in the project root with `OPENAI_API_KEY=sk-...`
+
+**SOPs not loading / agent not following procedures**
+→ Verify `config/sops.json` is wrapped in `{ "sops": [...] }`, not a bare array.
+
+**MCP tools not loading**
+→ Check `config/features.json` has `"mcp": { "enabled": true }`. Verify the MCP server is running and reachable at the URL in `config/mcp-config.json`. Each server entry needs `"enabled": true`.
+
+**Agent responding twice or not debouncing**
+→ The debounce is 1.5 seconds. Multiple very rapid messages should batch into one turn. If you see duplicate responses, check that only one instance of the agent is running.
+
+**Poor response quality / hallucinations**
+→ Raise `knowledgeBase.similarityThreshold` (try 0.7, 0.85) to inject only high-relevance docs. Add more documents covering the questions being asked. Add SOPs to guide specific scenarios.
+
+**Slack handoff not triggering**
+→ Verify `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_CHANNEL_ID` are set. Confirm `humanHandoff.slackEnabled: true` in `company.json`. Check that the bot is invited to the channel.
+
+**Embeddings not updating after doc changes**
+→ The cache auto-invalidates by content hash. If it seems stuck: `rm -rf embeddings/` to force full regeneration.
+
+**Dashboard port in use**
+→ `PORT=3001 cd dashboard && bun dev`
+
+---
+
+## Security Notes
+
+- Store secrets in `.env.local` only ,  it is gitignored
+- The iMessage agent requires Full Disk Access to read the Messages SQLite database. Only run it on machines you control.
+- The upload endpoint restricts file types and sanitizes filenames with `path.basename()` to prevent path traversal
+- Never ask customers for passwords or full payment card numbers over iMessage ,  this is enforced in the system prompt and by the SOPs
+
+---
+
+## License
+
+MIT ,  see individual package licenses for `@photon-ai/imessage-kit` and `openai`.

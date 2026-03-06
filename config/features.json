@@ -6,7 +6,7 @@
     "requiresApproval": false
   },
   "mcp": {
-    "enabled": false
+    "enabled": true
   },
   "sops": {
     "enabled": true,

@@ -20,9 +20,15 @@
   },
   "humanHandoff": {
     "enabled": true,
-    "keywords": ["human", "person", "representative", "agent", "speak to someone"],
+    "keywords": [
+      "human",
+      "person",
+      "representative",
+      "agent",
+      "speak to someone"
+    ],
     "message": "I'll connect you with a team member. Please hold on.",
-    "slackEnabled": false,
-    "slackChannelId": ""
+    "slackEnabled": true,
+    "slackChannelId": "C0AK030GAKW"
   }
 }

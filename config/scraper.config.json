@@ -22,12 +22,12 @@
     "clearing": "Use 'Clear All Scraped Documents' button to remove scraped content",
     "manual_docs": "Manual documents (without 'scraped_' prefix) are preserved when clearing"
   },
-  "websiteUrl": "https://github.com/photon-hq",
-  "includeSameOriginSubdomains": false,
+  "websiteUrl": "https://photon.codes",
+  "includeSameOriginSubdomains": true,
   "maxDepth": 3,
   "autoUpdateEnabled": false,
   "autoUpdateIntervalMinutes": 72,
-  "lastScraped": "2026-03-05T22:39:54.196Z",
+  "lastScraped": "2026-03-06T01:25:26.415Z",
   "totalPages": 22,
   "lastScrapeStats": {
     "processedPages": 22,

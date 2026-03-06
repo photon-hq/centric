@@ -256,7 +256,7 @@ export class DocumentVectorStore {
   /**
    * Search for relevant documents using semantic similarity
    */
-  async search(query: string, topK: number = 3): Promise<SearchResult[]> {
+  async search(query: string, topK: number = 3, minSimilarity: number = 0): Promise<SearchResult[]> {
     if (this.documents.length === 0) {
       return []
     }
@@ -271,7 +271,8 @@ export class DocumentVectorStore {
 
     results.sort((a, b) => b.similarity - a.similarity)
 
-    return results.slice(0, topK)
+    const filtered = minSimilarity > 0 ? results.filter((r) => r.similarity >= minSimilarity) : results
+    return filtered.slice(0, topK)
   }
 
   /**

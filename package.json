@@ -8,8 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "start:agent": "bun run packages/agent/src/index.ts",
-    "dev:agent": "bun --watch packages/agent/src/index.ts",
+    "sync:sdk": "git submodule update --remote --merge packages/imessage-kit && cd packages/imessage-kit && bun run build",
+    "start:agent": "npm run sync:sdk && bun run packages/agent/src/index.ts",
+    "dev:agent": "npm run sync:sdk && bun --watch packages/agent/src/index.ts",
     "start:dashboard": "cd packages/dashboard && npm run dev",
     "fix:emdash": "node ./scripts/replace-em-dashes.js",
     "build": "npm run build --workspaces",

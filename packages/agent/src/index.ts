@@ -45,12 +45,43 @@ logger.info('Starting Photon Customer Support Agent v2.0')
 // Module-level references set during main() initialization
 let sdk: IMessageSDK
 let slackNotifier: SlackNotifier | null = null
+let mcpManager: MCPManager
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+function sanitizeEmDashes(text: string): string {
+  if (!text) return text
+  return text.replace(/\s*[\u2014\u2013]\s*/g, ', ')
+}
 
 // ============================================================================
 // Conversation State Management
 // ============================================================================
 
 const conversations = new Map<string, ConversationState>()
+
+// ============================================================================
+// Per-Sender Message Queue (handles double/triple texting)
+// ============================================================================
+
+const DEBOUNCE_MS = 1500
+
+interface SenderQueue {
+  pending: string[]
+  debounceTimer: ReturnType<typeof setTimeout> | null
+  isProcessing: boolean
+}
+
+const senderQueues = new Map<string, SenderQueue>()
+
+function getSenderQueue(sender: string): SenderQueue {
+  if (!senderQueues.has(sender)) {
+    senderQueues.set(sender, { pending: [], debounceTimer: null, isProcessing: false })
+  }
+  return senderQueues.get(sender)!
+}
 
 function getConversation(phoneNumber: string): ConversationState {
   if (!conversations.has(phoneNumber)) {
@@ -120,7 +151,7 @@ function detectPurchaseIntent(message: string): boolean {
 
 async function getRelevantContext(query: string, vectorStore: DocumentVectorStore): Promise<string> {
   const maxResults = config.features.knowledgeBase.maxResults
-  const results = await vectorStore.search(query, maxResults)
+  const results = await vectorStore.search(query, maxResults, config.features.knowledgeBase.similarityThreshold)
 
   if (results.length === 0) {
     return 'No specific documentation found for this query.'
@@ -202,9 +233,6 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
       if (detectHumanHandoff(message, config.company.humanHandoff.keywords)) {
         conversation.humanHandoffRequested = true
 
-        // Increment handoff count before posting
-        conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
-
         // Slack integration: post handoff notification
         if (slackNotifier) {
           const summary = await generateHandoffSummary(conversation)
@@ -212,11 +240,12 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
           if (threadTs) {
             conversation.slackThreadTs = threadTs
             conversation.humanHandoffActive = true
+            conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
             logger.info({ sender, threadTs }, 'Human handoff posted to Slack')
           }
         }
 
-        return config.company.humanHandoff.message
+        return sanitizeEmDashes(config.company.humanHandoff.message)
       }
     }
 
@@ -266,21 +295,63 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
       }))
     ]
 
-    const completion = await openai.chat.completions.create({
+    const openAITools = mcpManager.getTools().length > 0 ? mcpManager.convertToOpenAIFormat() : undefined
+
+    const completionOptions: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
       model: config.ai.model,
       messages,
       temperature: config.ai.temperature,
-      max_completion_tokens: config.ai.maxTokens
-    })
+      max_completion_tokens: config.ai.maxTokens,
+      ...(openAITools ? { tools: openAITools, tool_choice: 'auto' as const } : {})
+    }
 
-    const assistantMessage = completion.choices[0]?.message?.content || 'I apologize, but I encountered an error.'
+    let assistantMessage = ''
+    const maxIterations = 5
+    let iteration = 0
+
+    while (iteration < maxIterations) {
+      iteration++
+      const completion = await openai.chat.completions.create(completionOptions)
+      const choice = completion.choices[0]
+
+      if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
+        messages.push(choice.message as OpenAI.Chat.ChatCompletionMessageParam)
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.type === 'function') {
+            const functionName = toolCall.function.name
+            let functionArgs: Record<string, any>
+            try {
+              functionArgs = JSON.parse(toolCall.function.arguments)
+            } catch {
+              functionArgs = {}
+            }
+            logger.info({ toolName: functionName, args: functionArgs }, 'Executing MCP tool')
+            try {
+              const result = await mcpManager.executeTool(functionName, functionArgs)
+              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) })
+            } catch (error) {
+              logger.error({ error, toolName: functionName }, 'MCP tool execution failed')
+              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ success: false, error: String(error) }) })
+            }
+          }
+        }
+        completionOptions.messages = messages
+      } else {
+        assistantMessage = sanitizeEmDashes(choice.message.content || 'I apologize, but I encountered an error.')
+        break
+      }
+    }
+
+    if (!assistantMessage) {
+      assistantMessage = 'I apologize, but I reached the maximum number of tool calls. Please try rephrasing your request.'
+    }
 
     conversation.messageHistory.push({ role: 'assistant', content: assistantMessage })
 
     return assistantMessage
   } catch (error) {
     logger.error({ error, sender }, 'Error generating response')
-    return generateErrorResponse(config.company)
+    return sanitizeEmDashes(generateErrorResponse(config.company))
   }
 }
 
@@ -302,7 +373,7 @@ async function main() {
     config.ai.embeddingModel
   )
   const productCatalog = new ProductCatalog(config.products)
-  const mcpManager = new MCPManager()
+  mcpManager = new MCPManager()
 
   // Initialize vector store
   if (config.features.knowledgeBase.enabled) {
@@ -334,6 +405,7 @@ async function main() {
         const conversation = getConversation(sender)
         conversation.humanHandoffActive = false
         conversation.slackThreadTs = undefined
+        conversation.currentNegotiation = undefined
         logger.info({ sender }, 'Human handoff resolved, AI re-enabled')
         try {
           await sdk.send(sender, "You're back with the AI assistant. How can I help?")
@@ -351,46 +423,81 @@ async function main() {
 
   logger.info('Agent initialized successfully')
 
+  // Process all pending messages for a sender as one combined turn
+  async function processSenderQueue(sender: string): Promise<void> {
+    const queue = getSenderQueue(sender)
+
+    // If already processing, the finally block below will re-trigger after it finishes
+    if (queue.isProcessing || queue.pending.length === 0) return
+
+    queue.isProcessing = true
+    const messages = queue.pending.splice(0) // drain atomically
+    const combinedText = messages.join('\n')
+
+    logger.info({ sender, messageCount: messages.length }, 'Processing queued messages')
+
+    const conversation = getConversation(sender)
+
+    // If human handoff is active, relay to Slack instead
+    if (conversation.humanHandoffActive && conversation.slackThreadTs && slackNotifier) {
+      try {
+        await slackNotifier.postCustomerMessage(conversation.slackThreadTs, combinedText)
+        logger.info({ sender }, 'Relayed customer message to Slack thread')
+      } catch (error) {
+        logger.error({ error, sender }, 'Failed to relay message to Slack')
+      } finally {
+        queue.isProcessing = false
+        if (queue.pending.length > 0) {
+          queue.debounceTimer = setTimeout(() => processSenderQueue(sender), DEBOUNCE_MS)
+        }
+      }
+      return
+    }
+
+    const isFirstMessage = conversation.messageHistory.length === 0
+
+    try {
+      const response = await generateResponse(sender, combinedText, vectorStore, productCatalog)
+
+      let finalMessage = response
+      if (isFirstMessage) {
+        const greeting = generateGreeting(config.company, true)
+        if (greeting) {
+          finalMessage = `${greeting}\n\n${response}`
+        }
+      }
+
+      await sdk.send(sender, sanitizeEmDashes(finalMessage))
+      logger.info({ sender }, 'Response sent successfully')
+    } catch (error) {
+      logger.error({ error, sender }, 'Error processing message')
+      await sdk.send(sender, sanitizeEmDashes(generateErrorResponse(config.company)))
+    } finally {
+      queue.isProcessing = false
+      // If more messages arrived while we were processing, handle them now
+      if (queue.pending.length > 0) {
+        queue.debounceTimer = setTimeout(() => processSenderQueue(sender), DEBOUNCE_MS)
+      }
+    }
+  }
+
   // Watch for messages
   await sdk.startWatching({
     onDirectMessage: async (msg: Message) => {
-      // Only respond to messages from others
       if (msg.isFromMe) return
 
       const sender = msg.sender || msg.chatId
       const text = msg.text || ''
+      if (!text.trim()) return
 
       logger.info({ sender }, 'Incoming message')
 
-      const conversation = getConversation(sender)
+      const queue = getSenderQueue(sender)
+      queue.pending.push(text)
 
-      // If human handoff is active, relay to Slack thread instead of generating AI response
-      if (conversation.humanHandoffActive && conversation.slackThreadTs && slackNotifier) {
-        await slackNotifier.postCustomerMessage(conversation.slackThreadTs, text)
-        logger.info({ sender }, 'Relayed customer message to Slack thread')
-        return
-      }
-
-      const isFirstMessage = conversation.messageHistory.length === 0
-
-      try {
-        const response = await generateResponse(sender, text, vectorStore, productCatalog)
-
-        // Add greeting if first message
-        let finalMessage = response
-        if (isFirstMessage) {
-          const greeting = generateGreeting(config.company, true)
-          if (greeting) {
-            finalMessage = `${greeting}\n\n${response}`
-          }
-        }
-
-        await sdk.send(sender, finalMessage)
-        logger.info({ sender }, 'Response sent successfully')
-      } catch (error) {
-        logger.error({ error, sender }, 'Error processing message')
-        await sdk.send(sender, generateErrorResponse(config.company))
-      }
+      // Reset debounce ,  wait for the user to finish typing before processing
+      if (queue.debounceTimer) clearTimeout(queue.debounceTimer)
+      queue.debounceTimer = setTimeout(() => processSenderQueue(sender), DEBOUNCE_MS)
     }
   })
 

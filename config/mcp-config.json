@@ -1,5 +1,14 @@
 {
   "enabled": true,
-  "servers": [],
-  "lastUpdated": "2026-03-04T20:41:12.968Z"
+  "servers": [
+    {
+      "id": "local-customer-support",
+      "name": "Local Customer Support Tools",
+      "url": "http://localhost:3100",
+      "apiKey": "",
+      "type": "sse",
+      "enabled": true
+    }
+  ],
+  "lastUpdated": "2026-03-05T00:00:00.000Z"
 }
