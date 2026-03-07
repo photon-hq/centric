@@ -216,6 +216,7 @@ export interface ConversationState {
   handoffCount?: number
   ticketClosed?: boolean
   ticketId?: string
+  senderPhone?: string
 }
 
 // ============================================================================

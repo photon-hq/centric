@@ -454,6 +454,11 @@ async function generateResponse(
     conversation = fresh
   }
 
+  // Store phone number for Slack handoff display
+  if (senderPhone && !conversation.senderPhone) {
+    conversation.senderPhone = senderPhone
+  }
+
   // Check if this is the first message
   const isFirstMessage = conversation.messageHistory.length === 0 && !conversation.firstMessageShown
 
@@ -492,6 +497,7 @@ async function generateResponse(
   if (config?.company.humanHandoff?.enabled && detectHumanHandoff(userMessage)) {
     conversation.humanHandoffRequested = true
     conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
+    conversation.humanHandoffActive = true
 
     const handoffMsg = sanitizeEmDashes(config.company.humanHandoff.message || "I'll connect you with a team member. Please hold on.")
     conversation.messageHistory.push({ role: 'assistant', content: handoffMsg })
@@ -502,7 +508,6 @@ async function generateResponse(
         const threadTs = await slackNotifier.postHandoff(sessionId, conversation, summary)
         if (threadTs) {
           conversation.slackThreadTs = threadTs
-          conversation.humanHandoffActive = true
         }
       } catch (err: any) {
         console.error('⚠️  Dashboard: Failed to post handoff to Slack:', err?.data?.error || err?.message || err)

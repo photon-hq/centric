@@ -320,11 +320,18 @@ async function generateHandoffSummary(conversation: ConversationState): Promise<
 async function generateResponse(sender: string, message: string, vectorStore: DocumentVectorStore, productCatalog: ProductCatalog, images: Attachment[] = []): Promise<string> {
   const conversation = getConversation(sender)
 
+  // Store phone number for Slack handoff display
+  if (!conversation.senderPhone) {
+    conversation.senderPhone = sender
+  }
+
   try {
     // Check for human handoff
     if (config.company.humanHandoff?.enabled) {
       if (detectHumanHandoff(message, config.company.humanHandoff.keywords)) {
         conversation.humanHandoffRequested = true
+        conversation.humanHandoffActive = true
+        conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
 
         // Slack integration: post handoff notification
         if (slackNotifier) {
@@ -333,8 +340,6 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
             const threadTs = await slackNotifier.postHandoff(sender, conversation, summary)
             if (threadTs) {
               conversation.slackThreadTs = threadTs
-              conversation.humanHandoffActive = true
-              conversation.handoffCount = (conversation.handoffCount ?? 0) + 1
               logger.info({ sender, threadTs }, 'Human handoff posted to Slack')
             }
           } catch (err: any) {
@@ -597,11 +602,14 @@ async function main() {
 
     const conversation = getConversation(sender)
 
-    // If human handoff is active, relay to Slack instead
-    if (conversation.humanHandoffActive && conversation.slackThreadTs && slackNotifier) {
+    // If human handoff is active, relay to Slack instead of processing with AI
+    if (conversation.humanHandoffActive) {
       try {
-        await slackNotifier.postCustomerMessage(conversation.slackThreadTs, combinedText)
-        logger.info({ sender }, 'Relayed customer message to Slack thread')
+        if (slackNotifier && conversation.slackThreadTs) {
+          await slackNotifier.postCustomerMessage(conversation.slackThreadTs, combinedText)
+          logger.info({ sender }, 'Relayed customer message to Slack thread')
+        }
+        await sdk.send(sender, "Your message has been sent to our support team. They'll reply here shortly.")
       } catch (error) {
         logger.error({ error, sender }, 'Failed to relay message to Slack')
       } finally {

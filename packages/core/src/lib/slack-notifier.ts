@@ -33,12 +33,13 @@ export class SlackNotifier {
   }
 
   async start(): Promise<void> {
+    // Handle incoming thread replies ,  relay back to the customer
     this.app.event('message', async ({ event }) => {
       const msg = event as any
 
-      // Ignore top-level messages, bot messages, and messages from other channels
+      // Only handle thread replies in our channel, ignore bots and all non-plain messages
       if (!msg.thread_ts) return
-      if (msg.bot_id || msg.subtype === 'bot_message') return
+      if (msg.bot_id || msg.subtype) return
       if (msg.channel !== this.channelId) return
 
       const sender = this.threadMap.get(msg.thread_ts)
@@ -46,16 +47,14 @@ export class SlackNotifier {
 
       const text: string = msg.text || ''
 
-      if (text.trim() === '/resolve') {
+      // CLOSETICKET keyword ,  re-enables AI without forwarding to customer
+      if (text.trim().toUpperCase() === 'CLOSETICKET') {
         this.callbacks.onResolve(sender)
-        await this.app.client.chat.postMessage({
-          channel: this.channelId,
-          thread_ts: msg.thread_ts,
-          text: '✅ Resolved. AI re-enabled.'
-        })
-      } else {
-        this.callbacks.onMessageForCustomer(sender, text)
+        this.threadMap.delete(msg.thread_ts)
+        return
       }
+
+      this.callbacks.onMessageForCustomer(sender, text)
     })
 
     await this.app.start()
@@ -81,42 +80,58 @@ export class SlackNotifier {
       })
 
       const priorEscalations = conversation.handoffCount ?? 0
+      const phone = conversation.senderPhone || sender
 
-      const transcript = conversation.messageHistory
-        .map((msg) => `${msg.role === 'user' ? 'User' : 'Agent'}: ${msg.content}`)
-        .join('\n')
-
-      // Format phone number for display
-      const formattedPhone = sender.replace(/[^0-9+]/g, '')
-
-      const text = [
-        '🚨 Human Handoff Request',
+      const alertText = [
+        ':rotating_light: *Human Handoff Request*',
         '',
-        `Customer Phone: ${formattedPhone}`,
-        `Time: ${time}`,
-        `Prior escalations this session: ${priorEscalations}`,
+        `*Customer Phone:* ${phone}`,
+        `*Time:* ${time}`,
+        `*Prior escalations this session:* ${priorEscalations}`,
         '',
-        '📋 AI Issue Summary:',
-        summary,
-        '',
-        '💬 Conversation Transcript:',
-        transcript,
-        '',
-        '---',
-        'Reply here to respond via iMessage. Type /resolve when done to re-enable AI.'
+        ':clipboard: *AI Issue Summary:*',
+        summary
       ].join('\n')
 
       const result = await this.app.client.chat.postMessage({
         channel: this.channelId,
-        text
+        text: alertText,
+        mrkdwn: true
       })
 
-      if (result.ts) {
-        this.threadMap.set(result.ts, sender)
-        return result.ts
+      if (!result.ts) {
+        console.error('[SlackNotifier] postHandoff: message posted but no ts returned', result)
+        return null
       }
-      console.error('[SlackNotifier] postHandoff: message posted but no ts returned', result)
-      return null
+
+      // Lock in the canonical channel ID from the API response so event filtering always matches
+      if (result.channel) this.channelId = result.channel as string
+
+      this.threadMap.set(result.ts, sender)
+
+      // Post full transcript as a thread reply
+      const transcriptLines = conversation.messageHistory.map((msg) => {
+        const label = msg.role === 'user' ? '👤 *Customer:*' : '🤖 *Agent:*'
+        return `${label} ${msg.content}`
+      })
+
+      const threadText = [
+        '💬 *Conversation Transcript*',
+        '',
+        ...transcriptLines,
+        '',
+        '---',
+        '_Reply in this thread to respond to the customer. Type `CLOSETICKET` when done to re-enable AI._'
+      ].join('\n\n').replace(/\n\n---\n\n/g, '\n\n---\n')
+
+      await this.app.client.chat.postMessage({
+        channel: this.channelId,
+        thread_ts: result.ts,
+        text: threadText,
+        mrkdwn: true
+      })
+
+      return result.ts
     } catch (error: any) {
       console.error('[SlackNotifier] postHandoff failed:', error?.data?.error || error?.message || error)
       throw error
@@ -130,8 +145,8 @@ export class SlackNotifier {
         thread_ts: threadTs,
         text: `📱 Customer: ${text}`
       })
-    } catch {
-      // silently fail - customer message relay is best-effort
+    } catch (error: any) {
+      console.error('[SlackNotifier] postCustomerMessage failed:', error?.data?.error || error?.message || error)
     }
   }
 }
