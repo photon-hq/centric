@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { 
+import {
   Globe,
   FileText,
   CloudUpload,
@@ -15,24 +15,20 @@ import {
   X,
   ArrowLeft,
   Loader2,
-  FileUp,
   CheckCircle,
   AlertTriangle,
   Info,
-  Layout,
   ClipboardList,
   Plus,
   ChevronDown,
   ChevronUp,
   Plug,
   Server,
-  ToggleLeft,
-  ToggleRight,
   Download,
-  FileDown,
   MessageSquare,
   KeyRound,
-  Hash
+  Hash,
+
 } from 'lucide-react'
 
 interface ScrapeConfig {
@@ -81,6 +77,27 @@ interface MCPConfig {
   lastUpdated: string | null
 }
 
+// Shared input style
+const inp = "w-full px-3 py-2 bg-[#0a0a0a] border border-[#222] rounded-lg text-sm text-white placeholder-[#444] focus:outline-none focus:border-[#444] transition-colors"
+const inpSm = "px-3 py-2 bg-[#0a0a0a] border border-[#222] rounded-lg text-sm text-white placeholder-[#444] focus:outline-none focus:border-[#444] transition-colors"
+const btnPrimary = "flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-[#ededed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+const btnSecondary = "flex items-center gap-2 px-3 py-2 bg-[#111] border border-[#222] text-[#888] text-sm font-medium rounded-lg hover:bg-[#1a1a1a] hover:text-white hover:border-[#333] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+const btnGhost = "flex items-center gap-2 px-3 py-2 text-[#555] text-sm rounded-lg hover:bg-[#111] hover:text-white transition-colors"
+
+function SectionHeader({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-8 h-8 rounded-lg bg-[#111] border border-[#222] flex items-center justify-center text-[#888]">
+        {icon}
+      </div>
+      <div>
+        <div className="text-sm font-medium text-white">{title}</div>
+        <div className="text-xs text-[#555]">{desc}</div>
+      </div>
+    </div>
+  )
+}
+
 export default function ConfigPage() {
   const [config, setConfig] = useState<ScrapeConfig>({
     websiteUrl: '',
@@ -89,10 +106,7 @@ export default function ConfigPage() {
     autoUpdateEnabled: false,
     autoUpdateIntervalMinutes: 60
   })
-  const [autoUpdateForm, setAutoUpdateForm] = useState({
-    enabled: false,
-    intervalMinutes: 60
-  })
+  const [autoUpdateForm, setAutoUpdateForm] = useState({ enabled: false, intervalMinutes: 60 })
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingAutoUpdate, setIsSavingAutoUpdate] = useState(false)
   const [autoUpdateStatus, setAutoUpdateStatus] = useState<{
@@ -109,1107 +123,454 @@ export default function ConfigPage() {
       stalePagesRemoved: number
     } | null
   } | null>(null)
-  const [scrapeProgress, setScrapeProgress] = useState<{
-    current: number
-    total: number
-    currentUrl: string
-  } | null>(null)
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null)
+  const [scrapeProgress, setScrapeProgress] = useState<{ current: number; total: number; currentUrl: string } | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
   const [uploadFiles, setUploadFiles] = useState<FileList | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [documents, setDocuments] = useState<Array<{
-    name: string
-    size: number
-    modified: string
-    type: 'scraped' | 'uploaded' | 'manual'
-  }>>([])
+  const [documents, setDocuments] = useState<Array<{ name: string; size: number; modified: string; type: 'scraped' | 'uploaded' | 'manual' }>>([])
   const [isLoadingDocs, setIsLoadingDocs] = useState(false)
-  const [viewingDocument, setViewingDocument] = useState<{
-    filename: string
-    content: string
-  } | null>(null)
+  const [viewingDocument, setViewingDocument] = useState<{ filename: string; content: string } | null>(null)
   const [isLoadingDocument, setIsLoadingDocument] = useState(false)
   const [isEditingDocument, setIsEditingDocument] = useState(false)
   const [editedDocumentContent, setEditedDocumentContent] = useState('')
   const [isSavingDocument, setIsSavingDocument] = useState(false)
-  
-  // SOP State
+
   const [sops, setSOPs] = useState<SOP[]>([])
   const [isLoadingSOPs, setIsLoadingSOPs] = useState(false)
   const [expandedSOP, setExpandedSOP] = useState<string | null>(null)
   const [showNewSOPForm, setShowNewSOPForm] = useState(false)
-  const [newSOP, setNewSOP] = useState({
-    title: '',
-    objective: '',
-    trigger: '',
-    steps: ['']
-  })
+  const [newSOP, setNewSOP] = useState({ title: '', objective: '', trigger: '', steps: [''] })
   const [editingSOPId, setEditingSOPId] = useState<string | null>(null)
-  const [editingSOP, setEditingSOP] = useState({
-    title: '',
-    objective: '',
-    trigger: '',
-    steps: ['']
-  })
-  
-  // MCP State
-  const [mcpConfig, setMCPConfig] = useState<MCPConfig>({
-    enabled: false,
-    servers: [],
-    lastUpdated: null
-  })
+  const [editingSOP, setEditingSOP] = useState({ title: '', objective: '', trigger: '', steps: [''] })
+
+  const [mcpConfig, setMCPConfig] = useState<MCPConfig>({ enabled: false, servers: [], lastUpdated: null })
   const [isLoadingMCP, setIsLoadingMCP] = useState(false)
   const [showNewMCPForm, setShowNewMCPForm] = useState(false)
-  const [newMCPServer, setNewMCPServer] = useState({
-    name: '',
-    url: '',
-    apiKey: '',
-    type: 'sse' as 'stdio' | 'sse' | 'streamable-http',
-    command: '',
-    args: ''
-  })
+  const [newMCPServer, setNewMCPServer] = useState({ name: '', url: '', apiKey: '', type: 'sse' as 'stdio' | 'sse' | 'streamable-http', command: '', args: '' })
 
-  // Slack State
   const [slackStatus, setSlackStatus] = useState({
-    slackEnabled: false,
-    slackChannelId: '',
-    slackPingType: 'none' as 'none' | 'here' | 'channel',
-    botTokenSet: false,
-    appTokenSet: false
+    slackEnabled: false, slackChannelId: '', slackPingType: 'none' as 'none' | 'here' | 'channel', botTokenSet: false, appTokenSet: false
   })
-  const [slackForm, setSlackForm] = useState({
-    botToken: '',
-    appToken: '',
-    channelId: ''
-  })
+  const [slackForm, setSlackForm] = useState({ botToken: '', appToken: '', channelId: '' })
   const [isSavingSlack, setIsSavingSlack] = useState(false)
   const [isLoadingSlack, setIsLoadingSlack] = useState(false)
-
-  // Connection test state
   const [mcpTestResults, setMCPTestResults] = useState<Record<string, { ok: boolean; toolCount?: number; error?: string } | null | undefined>>({})
   const [slackTestResult, setSlackTestResult] = useState<{ ok: boolean; team?: string; botName?: string; error?: string } | null>(null)
 
-  // File input refs for import
   const sopFileInputRef = useRef<HTMLInputElement>(null)
   const mcpFileInputRef = useRef<HTMLInputElement>(null)
   const lastObservedAutoRunRef = useRef<string | null>(null)
 
   useEffect(() => {
-    loadConfig()
-    loadDocuments()
-    loadSOPs()
-    loadMCPConfig()
-    loadAutoUpdateStatus()
-    loadSlackConfig()
+    loadConfig(); loadDocuments(); loadSOPs(); loadMCPConfig(); loadAutoUpdateStatus(); loadSlackConfig()
   }, [])
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadAutoUpdateStatus()
-    }, 10000)
-
+    const interval = setInterval(() => { loadAutoUpdateStatus() }, 10000)
     return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
     const lastRun = autoUpdateStatus?.lastRun || null
     if (!lastRun) return
-
     if (lastObservedAutoRunRef.current !== lastRun) {
       lastObservedAutoRunRef.current = lastRun
-      loadConfig()
-      loadDocuments()
+      loadConfig(); loadDocuments()
     }
   }, [autoUpdateStatus?.lastRun])
 
-  // Auto-save config with debounce (excludes auto-update fields - those are applied only on button click)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (config.websiteUrl || config.maxDepth > 0) {
         const { autoUpdateEnabled, autoUpdateIntervalMinutes, ...saveConfig } = config
         fetch('/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(saveConfig)
-        }).catch(error => console.error('Auto-save failed:', error))
+        }).catch(() => {})
       }
-    }, 1000) // Wait 1 second after last change before saving
-
+    }, 1000)
     return () => clearTimeout(timer)
   }, [config])
 
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/config')
-      if (response.ok) {
-        const data = await response.json()
+      const res = await fetch('/api/config')
+      if (res.ok) {
+        const data = await res.json()
         if (data.config) {
           setConfig(data.config)
-          setAutoUpdateForm({
-            enabled: data.config.autoUpdateEnabled ?? false,
-            intervalMinutes: data.config.autoUpdateIntervalMinutes ?? 60
-          })
+          setAutoUpdateForm({ enabled: data.config.autoUpdateEnabled ?? false, intervalMinutes: data.config.autoUpdateIntervalMinutes ?? 60 })
         }
       }
-    } catch (error) {
-      console.error('Error loading config:', error)
-    }
+    } catch {}
   }
 
   const loadDocuments = async () => {
     setIsLoadingDocs(true)
     try {
-      const response = await fetch('/api/documents')
-      if (response.ok) {
-        const data = await response.json()
-        setDocuments(data.documents || [])
-      }
-    } catch (error) {
-      console.error('Error loading documents:', error)
-    } finally {
-      setIsLoadingDocs(false)
-    }
+      const res = await fetch('/api/documents')
+      if (res.ok) { const data = await res.json(); setDocuments(data.documents || []) }
+    } catch {} finally { setIsLoadingDocs(false) }
   }
 
   const loadAutoUpdateStatus = async () => {
     try {
-      const response = await fetch('/api/scrape/auto')
-      if (!response.ok) return
-      const data = await response.json()
-      setAutoUpdateStatus(data)
-    } catch (error) {
-      console.error('Error loading auto-update status:', error)
-    }
+      const res = await fetch('/api/scrape/auto')
+      if (res.ok) { const data = await res.json(); setAutoUpdateStatus(data) }
+    } catch {}
   }
 
   const handleScrape = async () => {
-    if (!config.websiteUrl) {
-      setMessage({ type: 'error', text: 'Please enter a website URL' })
-      return
-    }
-
-    // Normalize URL - add https:// if no protocol specified
+    if (!config.websiteUrl) { setMessage({ type: 'error', text: 'Please enter a website URL' }); return }
     let normalizedUrl = config.websiteUrl.trim()
     if (!normalizedUrl.match(/^https?:\/\//i)) {
       normalizedUrl = `https://${normalizedUrl}`
       setConfig({ ...config, websiteUrl: normalizedUrl })
     }
-
-    setIsLoading(true)
-    setMessage(null)
-    setScrapeProgress({ current: 0, total: 0, currentUrl: normalizedUrl })
-
+    setIsLoading(true); setMessage(null)
     try {
-      const response = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...config, websiteUrl: normalizedUrl })
+      const res = await fetch('/api/scrape', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: normalizedUrl, includeSameOriginSubdomains: config.includeSameOriginSubdomains, maxDepth: config.maxDepth })
       })
-
-      const reader = response.body?.getReader()
+      const reader = res.body?.getReader()
       const decoder = new TextDecoder()
-
       if (reader) {
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
-
-          const chunk = decoder.decode(value)
-          const lines = chunk.split('\n')
-
+          const text = decoder.decode(value)
+          const lines = text.split('\n').filter(l => l.startsWith('data: '))
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6))
-                
-                if (data.type === 'progress') {
-                  setScrapeProgress({
-                    current: data.current,
-                    total: data.total,
-                    currentUrl: data.url
-                  })
-                } else if (data.type === 'complete') {
-                  setMessage({
-                    type: 'success',
-                    text: `Scrape complete: ${data.newPages || 0} new, ${data.updatedPages || 0} updated, ${data.unchangedPages || 0} unchanged, ${data.stalePagesRemoved || 0} removed pages.`
-                  })
-                  setScrapeProgress(null)
-                  await loadConfig()
-                  await loadDocuments()
-                  await fetch('/api/reinitialize', { method: 'POST' })
-                } else if (data.type === 'error') {
-                  setMessage({ type: 'error', text: data.message })
-                  setScrapeProgress(null)
-                }
-              } catch (e) {
-                console.error('Error parsing SSE data:', e)
-              }
-            }
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.type === 'progress') setScrapeProgress({ current: data.current, total: data.total, currentUrl: data.url })
+              else if (data.type === 'complete') { setMessage({ type: 'success', text: data.message }); setScrapeProgress(null); await loadDocuments(); await fetch('/api/reinitialize', { method: 'POST' }) }
+              else if (data.type === 'error') { setMessage({ type: 'error', text: data.message }); setScrapeProgress(null) }
+            } catch {}
           }
         }
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
+    } catch (e) {
+      setMessage({ type: 'error', text: `Error: ${e instanceof Error ? e.message : String(e)}` })
       setScrapeProgress(null)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSaveConfig = async () => {
-    try {
-      const response = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Configuration saved successfully' })
-      } else {
-        setMessage({ type: 'error', text: 'Failed to save configuration' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    }
+    } finally { setIsLoading(false) }
   }
 
   const handleSaveAutoUpdate = async () => {
     setIsSavingAutoUpdate(true)
     try {
-      const response = await fetch('/api/scrape/auto', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'configure',
-          enabled: autoUpdateForm.enabled,
-          intervalMinutes: autoUpdateForm.intervalMinutes
-        })
+      const res = await fetch('/api/scrape/auto', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: autoUpdateForm.enabled, intervalMinutes: autoUpdateForm.intervalMinutes, websiteUrl: config.websiteUrl, includeSameOriginSubdomains: config.includeSameOriginSubdomains, maxDepth: config.maxDepth })
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to save auto update settings')
-      }
-
-      await loadAutoUpdateStatus()
-      await loadConfig()
-      setMessage({ type: 'success', text: 'Auto update settings saved' })
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    } finally {
-      setIsSavingAutoUpdate(false)
-    }
+      if (res.ok) { setMessage({ type: 'success', text: 'Auto-update settings saved' }); await loadAutoUpdateStatus() }
+      else setMessage({ type: 'error', text: 'Failed to save auto-update settings' })
+    } catch {} finally { setIsSavingAutoUpdate(false) }
   }
 
   const handleRunAutoUpdateNow = async () => {
     try {
-      const response = await fetch('/api/scrape/auto', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'run-now' })
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to run auto update')
-      }
-
-      await fetch('/api/reinitialize', { method: 'POST' })
-      await Promise.all([loadConfig(), loadDocuments(), loadAutoUpdateStatus()])
-      setMessage({ type: 'success', text: 'Auto update run complete. Indexed knowledge refreshed.' })
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    }
+      const res = await fetch('/api/scrape/auto', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'run-now' }) })
+      if (res.ok) { setMessage({ type: 'info', text: 'Auto-update started' }); await loadAutoUpdateStatus() }
+    } catch {}
   }
 
-  const handleClearDocuments = async () => {
-    if (!confirm('Are you sure you want to clear all scraped documents? This cannot be undone.')) {
-      return
-    }
-
-    try {
-      const response = await fetch('/api/config/clear', {
-        method: 'POST'
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'All scraped documents cleared' })
-        await Promise.all([loadConfig(), loadDocuments()])
-      } else {
-        setMessage({ type: 'error', text: 'Failed to clear documents' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    }
-  }
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setUploadFiles(e.target.files)
-    }
-  }
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { setUploadFiles(e.target.files) }
 
   const handleUpload = async () => {
-    if (!uploadFiles || uploadFiles.length === 0) {
-      setMessage({ type: 'error', text: 'Please select files to upload' })
-      return
-    }
-
+    if (!uploadFiles) return
     setIsUploading(true)
-    setMessage(null)
-
     try {
       const formData = new FormData()
-      Array.from(uploadFiles).forEach(file => {
-        formData.append('file', file)
-      })
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        setMessage({
-          type: 'success',
-          text: result.message
-        })
+      Array.from(uploadFiles).forEach(f => formData.append('files', f))
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (res.ok) {
+        const data = await res.json()
+        setMessage({ type: 'success', text: data.message || 'Files uploaded' })
         setUploadFiles(null)
-        // Reset file input
-        const fileInput = document.getElementById('file-upload') as HTMLInputElement
-        if (fileInput) fileInput.value = ''
-        // Reload documents list
         await loadDocuments()
-        // Refresh knowledge base
         await fetch('/api/reinitialize', { method: 'POST' })
       } else {
-        setMessage({ type: 'error', text: result.error || 'Failed to upload files' })
+        const err = await res.json()
+        setMessage({ type: 'error', text: err.error || 'Upload failed' })
       }
-    } catch (error) {
-      setMessage({
-        type: 'error',
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`
-      })
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  const handleDeleteDocument = async (filename: string) => {
-    if (!confirm(`Are you sure you want to delete ${filename}? This cannot be undone.`)) {
-      return
-    }
-
-    try {
-      const response = await fetch('/api/documents', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename })
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: `${filename} deleted successfully` })
-        await loadDocuments()
-        // Refresh knowledge base
-        await fetch('/api/reinitialize', { method: 'POST' })
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to delete document' })
-      }
-    } catch (error) {
-      setMessage({
-        type: 'error',
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`
-      })
-    }
-  }
-
-  const handleRefresh = async () => {
-    try {
-      await Promise.all([loadConfig(), loadDocuments()])
-    } catch (error) {
-      console.error('Error refreshing:', error)
-    }
+    } catch (e) {
+      setMessage({ type: 'error', text: `Error: ${e instanceof Error ? e.message : String(e)}` })
+    } finally { setIsUploading(false) }
   }
 
   const handleViewDocument = async (filename: string) => {
-    setIsLoadingDocument(true)
-    setViewingDocument(null)
-    setIsEditingDocument(false)
-    
+    setIsLoadingDocument(true); setIsEditingDocument(false)
     try {
-      const response = await fetch(`/api/documents/${encodeURIComponent(filename)}`)
-      if (response.ok) {
-        const data = await response.json()
-        setViewingDocument(data)
+      const res = await fetch(`/api/documents/${encodeURIComponent(filename)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setViewingDocument({ filename, content: data.content })
         setEditedDocumentContent(data.content)
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to load document' })
       }
-    } catch (error) {
-      setMessage({
-        type: 'error',
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`
-      })
-    } finally {
-      setIsLoadingDocument(false)
-    }
+    } catch {} finally { setIsLoadingDocument(false) }
   }
+
+  const handleDeleteDocument = async (filename: string) => {
+    if (!confirm(`Delete ${filename}?`)) return
+    try {
+      const res = await fetch(`/api/documents/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+      if (res.ok) { setMessage({ type: 'success', text: 'Document deleted' }); await loadDocuments(); await fetch('/api/reinitialize', { method: 'POST' }) }
+    } catch {}
+  }
+
+  const handleClearDocuments = async () => {
+    if (!confirm('Delete all documents?')) return
+    try {
+      const res = await fetch('/api/config/clear', { method: 'POST' })
+      if (res.ok) { setMessage({ type: 'success', text: 'All documents cleared' }); await loadDocuments(); await fetch('/api/reinitialize', { method: 'POST' }) }
+    } catch {}
+  }
+
+  const handleRefresh = async () => { await loadDocuments() }
 
   const handleSaveDocumentEdit = async () => {
     if (!viewingDocument) return
-    
     setIsSavingDocument(true)
     try {
-      const response = await fetch('/api/documents/update', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: viewingDocument.filename,
-          content: editedDocumentContent
-        })
+      const res = await fetch('/api/documents/update', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: viewingDocument.filename, content: editedDocumentContent })
       })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Document saved successfully' })
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'Document saved' })
         setIsEditingDocument(false)
-        setViewingDocument({
-          ...viewingDocument,
-          content: editedDocumentContent
-        })
+        setViewingDocument({ ...viewingDocument, content: editedDocumentContent })
         await loadDocuments()
       } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to save document' })
+        const err = await res.json()
+        setMessage({ type: 'error', text: err.error || 'Failed to save' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    } finally {
-      setIsSavingDocument(false)
-    }
+    } catch (e) {
+      setMessage({ type: 'error', text: `Error: ${e instanceof Error ? e.message : String(e)}` })
+    } finally { setIsSavingDocument(false) }
   }
 
-  // SOP Functions
   const loadSOPs = async () => {
     setIsLoadingSOPs(true)
     try {
-      const response = await fetch('/api/sops')
-      if (response.ok) {
-        const data = await response.json()
-        setSOPs(data.sops || [])
-      }
-    } catch (error) {
-      console.error('Error loading SOPs:', error)
-    } finally {
-      setIsLoadingSOPs(false)
-    }
+      const res = await fetch('/api/sops')
+      if (res.ok) { const data = await res.json(); setSOPs(data.sops || []) }
+    } catch {} finally { setIsLoadingSOPs(false) }
   }
 
   const handleAddSOP = async () => {
     if (!newSOP.title || !newSOP.objective || !newSOP.trigger || newSOP.steps.filter(s => s.trim()).length === 0) {
-      setMessage({ type: 'error', text: 'Please fill in all SOP fields' })
-      return
+      setMessage({ type: 'error', text: 'Fill in all SOP fields' }); return
     }
-
     try {
-      const response = await fetch('/api/sops', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newSOP,
-          steps: newSOP.steps.filter(s => s.trim())
-        })
+      const res = await fetch('/api/sops', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newSOP, steps: newSOP.steps.filter(s => s.trim()) })
       })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'SOP added successfully' })
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'SOP added' })
         setNewSOP({ title: '', objective: '', trigger: '', steps: [''] })
         setShowNewSOPForm(false)
         await loadSOPs()
-        // Reinitialize knowledge base
         await fetch('/api/reinitialize', { method: 'POST' })
       } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to add SOP' })
+        const err = await res.json()
+        setMessage({ type: 'error', text: err.error || 'Failed' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
+    } catch (e) {
+      setMessage({ type: 'error', text: `Error: ${e instanceof Error ? e.message : String(e)}` })
     }
   }
 
   const handleDeleteSOP = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this SOP?')) return
-
+    if (!confirm('Delete this SOP?')) return
     try {
-      const response = await fetch('/api/sops', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'SOP deleted successfully' })
-        await loadSOPs()
-        await fetch('/api/reinitialize', { method: 'POST' })
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to delete SOP' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    }
+      const res = await fetch('/api/sops', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+      if (res.ok) { setMessage({ type: 'success', text: 'SOP deleted' }); await loadSOPs(); await fetch('/api/reinitialize', { method: 'POST' }) }
+    } catch {}
   }
 
   const handleToggleSOP = async (id: string, enabled: boolean) => {
     try {
-      const response = await fetch('/api/sops', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, enabled })
-      })
-
-      if (response.ok) {
-        await loadSOPs()
-        await fetch('/api/reinitialize', { method: 'POST' })
-      }
-    } catch (error) {
-      console.error('Error toggling SOP:', error)
-    }
+      await fetch('/api/sops', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, enabled }) })
+      await loadSOPs()
+      await fetch('/api/reinitialize', { method: 'POST' })
+    } catch {}
   }
 
   const handleStartEditSOP = (sop: SOP) => {
     setEditingSOPId(sop.id)
-    setEditingSOP({
-      title: sop.title,
-      objective: sop.objective,
-      trigger: sop.trigger,
-      steps: sop.steps.length > 0 ? sop.steps : ['']
-    })
+    setEditingSOP({ title: sop.title, objective: sop.objective, trigger: sop.trigger, steps: sop.steps.length > 0 ? sop.steps : [''] })
     setExpandedSOP(sop.id)
   }
 
   const handleCancelEditSOP = () => {
     setEditingSOPId(null)
-    setEditingSOP({
-      title: '',
-      objective: '',
-      trigger: '',
-      steps: ['']
-    })
+    setEditingSOP({ title: '', objective: '', trigger: '', steps: [''] })
   }
 
   const handleSaveSOPEdit = async (id: string) => {
-    const steps = editingSOP.steps.map(step => step.trim()).filter(Boolean)
-
+    const steps = editingSOP.steps.map(s => s.trim()).filter(Boolean)
     if (!editingSOP.title.trim() || !editingSOP.objective.trim() || !editingSOP.trigger.trim() || steps.length === 0) {
-      setMessage({ type: 'error', text: 'Please fill in all SOP fields before saving' })
-      return
+      setMessage({ type: 'error', text: 'Fill in all fields' }); return
     }
-
     try {
-      const response = await fetch('/api/sops', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          title: editingSOP.title.trim(),
-          objective: editingSOP.objective.trim(),
-          trigger: editingSOP.trigger.trim(),
-          steps
-        })
+      const res = await fetch('/api/sops', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, title: editingSOP.title.trim(), objective: editingSOP.objective.trim(), trigger: editingSOP.trigger.trim(), steps })
       })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'SOP updated successfully' })
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'SOP updated' })
         handleCancelEditSOP()
         await loadSOPs()
         await fetch('/api/reinitialize', { method: 'POST' })
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to update SOP' })
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    }
+    } catch {}
   }
 
-  // MCP Functions
-  const loadMCPConfig = async () => {
-    setIsLoadingMCP(true)
-    try {
-      const response = await fetch('/api/mcp')
-      if (response.ok) {
-        const data = await response.json()
-        setMCPConfig(data.config || { enabled: false, servers: [], lastUpdated: null })
-      }
-    } catch (error) {
-      console.error('Error loading MCP config:', error)
-    } finally {
-      setIsLoadingMCP(false)
-    }
-  }
-
-  const handleToggleMCP = async (enabled: boolean) => {
-    try {
-      const response = await fetch('/api/mcp', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled })
-      })
-
-      if (response.ok) {
-        setMCPConfig(prev => ({ ...prev, enabled }))
-        setMessage({ type: 'success', text: `MCP ${enabled ? 'enabled' : 'disabled'}` })
-      }
-    } catch (error) {
-      console.error('Error toggling MCP:', error)
-    }
-  }
-
-  const handleAddMCPServer = async () => {
-    if (!newMCPServer.name) {
-      setMessage({ type: 'error', text: 'Server name is required' })
-      return
-    }
-
-    if (newMCPServer.type === 'stdio' && !newMCPServer.command) {
-      setMessage({ type: 'error', text: 'Command is required for stdio transport' })
-      return
-    }
-
-    if ((newMCPServer.type === 'sse' || newMCPServer.type === 'streamable-http') && !newMCPServer.url) {
-      setMessage({ type: 'error', text: 'URL is required for SSE/HTTP transport' })
-      return
-    }
-
-    try {
-      const response = await fetch('/api/mcp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newMCPServer,
-          args: newMCPServer.args ? newMCPServer.args.split(' ').filter(a => a) : []
-        })
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'MCP server added successfully' })
-        setNewMCPServer({ name: '', url: '', apiKey: '', type: 'sse', command: '', args: '' })
-        setShowNewMCPForm(false)
-        await loadMCPConfig()
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to add MCP server' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    }
-  }
-
-  const handleDeleteMCPServer = async (serverId: string) => {
-    if (!confirm('Are you sure you want to remove this MCP server?')) return
-
-    try {
-      const response = await fetch('/api/mcp', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId })
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'MCP server removed' })
-        await loadMCPConfig()
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to remove MCP server' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: `Error: ${error instanceof Error ? error.message : String(error)}` })
-    }
-  }
-
-  const handleToggleMCPServer = async (serverId: string, enabled: boolean) => {
-    try {
-      const response = await fetch('/api/mcp', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId, enabled })
-      })
-
-      if (response.ok) {
-        await loadMCPConfig()
-      }
-    } catch (error) {
-      console.error('Error toggling MCP server:', error)
-    }
-  }
-
-  const handleTestMCPServer = async (serverId: string, url: string) => {
-    setMCPTestResults(prev => ({ ...prev, [serverId]: null }))
-    try {
-      const res = await fetch('/api/mcp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test', url })
-      })
-      const data = await res.json()
-      setMCPTestResults(prev => ({ ...prev, [serverId]: data }))
-      setTimeout(() => setMCPTestResults(prev => ({ ...prev, [serverId]: undefined })), 8000)
-    } catch (err) {
-      setMCPTestResults(prev => ({ ...prev, [serverId]: { ok: false, error: String(err) } }))
-      setTimeout(() => setMCPTestResults(prev => ({ ...prev, [serverId]: undefined })), 8000)
-    }
-  }
-
-  const handleTestSlack = async () => {
-    setSlackTestResult(null)
-    try {
-      const res = await fetch('/api/slack', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test' })
-      })
-      const data = await res.json()
-      setSlackTestResult(data)
-      setTimeout(() => setSlackTestResult(null), 8000)
-    } catch (err) {
-      setSlackTestResult({ ok: false, error: String(err) })
-      setTimeout(() => setSlackTestResult(null), 8000)
-    }
-  }
-
-  // SOP Import/Export Functions
   const handleExportSOPs = () => {
-    const dataStr = JSON.stringify(sops, null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `sops-export-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    setMessage({ type: 'success', text: `Exported ${sops.length} SOPs` })
+    const blob = new Blob([JSON.stringify(sops, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `sops-export-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
   const handleImportSOPs = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-
     try {
       const text = await file.text()
       let importedData = JSON.parse(text)
-
-      // Support both single SOP object and array of SOPs
-      let importedSOPs: any[] = []
-      if (Array.isArray(importedData)) {
-        importedSOPs = importedData
-      } else if (importedData && typeof importedData === 'object' && importedData.title) {
-        // Single SOP object
-        importedSOPs = [importedData]
-      } else {
-        setMessage({ type: 'error', text: 'Invalid SOP file format. Expected a single SOP object or array of SOPs.' })
-        return
-      }
-
-      // Validate SOP structure
-      const isValid = importedSOPs.every(sop => 
-        sop.title && sop.objective && sop.trigger && Array.isArray(sop.steps)
-      )
-
-      if (!isValid) {
-        setMessage({ type: 'error', text: 'Invalid SOP structure. Each SOP must have title, objective, trigger, and steps.' })
-        return
-      }
-
-      // Normalize steps - handle both string arrays and object arrays with 'step' property
-      importedSOPs = importedSOPs.map(sop => ({
-        ...sop,
-        steps: sop.steps.map((step: any) => {
-          if (typeof step === 'string') {
-            return step
-          } else if (typeof step === 'object' && step.step) {
-            return step.step
-          } else {
-            return String(step)
-          }
-        })
-      }))
-
-      // Helper to check if two SOPs are identical
-      const areSopsIdentical = (sop1: any, sop2: any) => {
-        return sop1.objective === sop2.objective &&
-               sop1.trigger === sop2.trigger &&
-               JSON.stringify(sop1.steps) === JSON.stringify(sop2.steps)
-      }
-
-      // Helper to find next available duplicate name
-      const getUniqueSopTitle = (baseTitle: string, existingSOPs: SOP[]) => {
-        const existingTitles = existingSOPs.map(s => s.title)
-        if (!existingTitles.includes(baseTitle)) {
-          return baseTitle
-        }
-
-        let duplicateNum = 1
-        let newTitle = `${baseTitle}-duplicate-${duplicateNum}`
-        while (existingTitles.includes(newTitle)) {
-          duplicateNum++
-          newTitle = `${baseTitle}-duplicate-${duplicateNum}`
-        }
-        return newTitle
-      }
-
-      // Import each SOP
-      let successCount = 0
-      let errorCount = 0
-      let duplicateCount = 0
-
+      const rawSOPs: any[] | null = Array.isArray(importedData) ? importedData : importedData?.title ? [importedData] : null
+      if (!rawSOPs) { setMessage({ type: 'error', text: 'Invalid SOP file format' }); return }
+      const isValid = rawSOPs.every((s: any) => s.title && s.objective && s.trigger && Array.isArray(s.steps))
+      if (!isValid) { setMessage({ type: 'error', text: 'Invalid SOP structure' }); return }
+      const importedSOPs = rawSOPs.map((sop: any) => ({ ...sop, steps: sop.steps.map((s: any) => typeof s === 'string' ? s : s.step ? s.step : String(s)) }))
+      let successCount = 0, errorCount = 0, duplicateCount = 0
       for (const sop of importedSOPs) {
-        try {
-          // Check if SOP with same title exists
-          const existingSOP = sops.find(s => s.title === sop.title)
-          
-          let titleToUse = sop.title
-
-          if (existingSOP) {
-            // Check if content is identical
-            if (areSopsIdentical(sop, existingSOP)) {
-              // Skip identical SOPs
-              duplicateCount++
-              continue
-            } else {
-              // Different content, create with duplicate suffix
-              titleToUse = getUniqueSopTitle(sop.title, sops)
-            }
-          }
-
-          const response = await fetch('/api/sops', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: titleToUse,
-              objective: sop.objective,
-              trigger: sop.trigger,
-              steps: sop.steps
-            })
-          })
-
-          if (response.ok) {
-            successCount++
-            // Update local sops list for subsequent duplicate checks
-            const newSop = await response.json()
-            setSOPs(prev => [...prev, newSop.sop])
-          } else {
-            errorCount++
-          }
-        } catch (error) {
-          errorCount++
-          console.error('Error importing SOP:', error)
+        const existing = sops.find(s => s.title === sop.title)
+        let titleToUse = sop.title
+        if (existing) {
+          const identical = existing.objective === sop.objective && existing.trigger === sop.trigger && JSON.stringify(existing.steps) === JSON.stringify(sop.steps)
+          if (identical) { duplicateCount++; continue }
+          let n = 1; let t = `${sop.title}-duplicate-${n}`
+          while (sops.find(s => s.title === t)) { n++; t = `${sop.title}-duplicate-${n}` }
+          titleToUse = t
         }
+        const res = await fetch('/api/sops', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sop, title: titleToUse }) })
+        if (res.ok) { successCount++; const d = await res.json(); setSOPs(prev => [...prev, d.sop]) } else errorCount++
       }
-
-      await loadSOPs()
-      await fetch('/api/reinitialize', { method: 'POST' })
-      
-      let message = `Imported ${successCount} SOPs`
-      if (duplicateCount > 0) {
-        message += `, skipped ${duplicateCount} identical`
-      }
-      if (errorCount > 0) {
-        message += `, ${errorCount} failed`
-      }
-      
-      setMessage({ 
-        type: errorCount > 0 ? 'info' : 'success', 
-        text: message 
-      })
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to parse JSON file' })
-      console.error('Import error:', error)
-    } finally {
-      // Reset file input
-      if (sopFileInputRef.current) {
-        sopFileInputRef.current.value = ''
-      }
-    }
+      await loadSOPs(); await fetch('/api/reinitialize', { method: 'POST' })
+      let msg = `Imported ${successCount} SOPs`
+      if (duplicateCount > 0) msg += `, skipped ${duplicateCount} identical`
+      if (errorCount > 0) msg += `, ${errorCount} failed`
+      setMessage({ type: errorCount > 0 ? 'info' : 'success', text: msg })
+    } catch { setMessage({ type: 'error', text: 'Failed to parse file' }) }
+    finally { if (sopFileInputRef.current) sopFileInputRef.current.value = '' }
   }
 
-  // MCP Import/Export Functions
+  const loadMCPConfig = async () => {
+    setIsLoadingMCP(true)
+    try {
+      const res = await fetch('/api/mcp')
+      if (res.ok) { const data = await res.json(); setMCPConfig(data.config || { enabled: false, servers: [], lastUpdated: null }) }
+    } catch {} finally { setIsLoadingMCP(false) }
+  }
+
+  const handleToggleMCP = async (enabled: boolean) => {
+    try {
+      const res = await fetch('/api/mcp', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) })
+      if (res.ok) { setMCPConfig(prev => ({ ...prev, enabled })); setMessage({ type: 'success', text: `MCP ${enabled ? 'enabled' : 'disabled'}` }) }
+    } catch {}
+  }
+
+  const handleAddMCPServer = async () => {
+    if (!newMCPServer.name) { setMessage({ type: 'error', text: 'Server name required' }); return }
+    if (newMCPServer.type === 'stdio' && !newMCPServer.command) { setMessage({ type: 'error', text: 'Command required for stdio' }); return }
+    if ((newMCPServer.type === 'sse' || newMCPServer.type === 'streamable-http') && !newMCPServer.url) { setMessage({ type: 'error', text: 'URL required' }); return }
+    try {
+      const res = await fetch('/api/mcp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newMCPServer, args: newMCPServer.args ? newMCPServer.args.split(' ').filter(Boolean) : [] })
+      })
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'Server added' })
+        setNewMCPServer({ name: '', url: '', apiKey: '', type: 'sse', command: '', args: '' })
+        setShowNewMCPForm(false)
+        await loadMCPConfig()
+      } else { const err = await res.json(); setMessage({ type: 'error', text: err.error || 'Failed' }) }
+    } catch (e) { setMessage({ type: 'error', text: `Error: ${e instanceof Error ? e.message : String(e)}` }) }
+  }
+
+  const handleToggleMCPServer = async (id: string, enabled: boolean) => {
+    try {
+      await fetch('/api/mcp', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ serverId: id, enabled }) })
+      await loadMCPConfig()
+    } catch {}
+  }
+
+  const handleDeleteMCPServer = async (id: string) => {
+    try {
+      const res = await fetch('/api/mcp', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+      if (res.ok) { setMessage({ type: 'success', text: 'Server removed' }); await loadMCPConfig() }
+    } catch {}
+  }
+
+  const handleTestMCPServer = async (id: string, url: string) => {
+    setMCPTestResults(prev => ({ ...prev, [id]: null }))
+    try {
+      const res = await fetch('/api/mcp', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ serverId: id, url }) })
+      const data = await res.json()
+      setMCPTestResults(prev => ({ ...prev, [id]: data }))
+    } catch { setMCPTestResults(prev => ({ ...prev, [id]: { ok: false, error: 'Connection failed' } })) }
+  }
+
   const handleExportMCP = () => {
-    const exportData = {
-      enabled: mcpConfig.enabled,
-      servers: mcpConfig.servers,
-      exportedAt: new Date().toISOString()
-    }
-    const dataStr = JSON.stringify(exportData, null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `mcp-config-export-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    setMessage({ type: 'success', text: `Exported MCP config with ${mcpConfig.servers.length} servers` })
+    const blob = new Blob([JSON.stringify({ enabled: mcpConfig.enabled, servers: mcpConfig.servers, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `mcp-config-export-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    setMessage({ type: 'success', text: `Exported ${mcpConfig.servers.length} servers` })
   }
 
   const handleImportMCP = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-
     try {
       const text = await file.text()
       let importedData = JSON.parse(text)
-
-      // Support both single server object and config with servers array
-      let importedServers: any[] = []
-      
-      if (Array.isArray(importedData)) {
-        // Direct array of servers
-        importedServers = importedData
-      } else if (importedData.servers && Array.isArray(importedData.servers)) {
-        // Config object with servers array
-        importedServers = importedData.servers
-      } else if (importedData && typeof importedData === 'object' && importedData.name && importedData.type) {
-        // Single server object
-        importedServers = [importedData]
-      } else {
-        setMessage({ type: 'error', text: 'Invalid MCP file format. Expected a server object, array of servers, or config with servers array.' })
-        return
-      }
-
-      // Validate server structure
-      const isValid = importedServers.every((server: any) => 
-        server.name && server.type && 
-        (server.type === 'stdio' ? server.command : true)
-      )
-
-      if (!isValid) {
-        setMessage({ type: 'error', text: 'Invalid server structure. Each server must have name, type, and command (for stdio) or url (for SSE/HTTP).' })
-        return
-      }
-
-      // Helper to check if two servers are identical
-      const areServersIdentical = (server1: any, server2: any) => {
-        const s1 = {
-          type: server1.type,
-          url: server1.url || '',
-          apiKey: server1.apiKey || '',
-          command: server1.command || '',
-          args: JSON.stringify(server1.args || [])
-        }
-        const s2 = {
-          type: server2.type,
-          url: server2.url || '',
-          apiKey: server2.apiKey || '',
-          command: server2.command || '',
-          args: JSON.stringify(server2.args || [])
-        }
-        return JSON.stringify(s1) === JSON.stringify(s2)
-      }
-
-      // Helper to find next available duplicate name
-      const getUniqueServerName = (baseName: string, existingServers: MCPServer[]) => {
-        const existingNames = existingServers.map(s => s.name)
-        if (!existingNames.includes(baseName)) {
-          return baseName
-        }
-
-        let duplicateNum = 1
-        let newName = `${baseName}-duplicate-${duplicateNum}`
-        while (existingNames.includes(newName)) {
-          duplicateNum++
-          newName = `${baseName}-duplicate-${duplicateNum}`
-        }
-        return newName
-      }
-
-      // Import each server
-      let successCount = 0
-      let errorCount = 0
-      let duplicateCount = 0
-
+      let importedServers: any[] = Array.isArray(importedData) ? importedData : importedData?.servers ? importedData.servers : importedData?.name && importedData?.type ? [importedData] : null
+      if (!importedServers) { setMessage({ type: 'error', text: 'Invalid MCP file format' }); return }
+      const isValid = importedServers.every((s: any) => s.name && s.type && (s.type === 'stdio' ? s.command : true))
+      if (!isValid) { setMessage({ type: 'error', text: 'Invalid server structure' }); return }
+      let successCount = 0, errorCount = 0, duplicateCount = 0
       for (const server of importedServers) {
-        try {
-          // Check if server with same name exists
-          const existingServer = mcpConfig.servers.find(s => s.name === server.name)
-          
-          let nameToUse = server.name
-
-          if (existingServer) {
-            // Check if content is identical
-            if (areServersIdentical(server, existingServer)) {
-              // Skip identical servers
-              duplicateCount++
-              continue
-            } else {
-              // Different content, create with duplicate suffix
-              nameToUse = getUniqueServerName(server.name, mcpConfig.servers)
-            }
-          }
-
-          const response = await fetch('/api/mcp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: nameToUse,
-              url: server.url || '',
-              apiKey: server.apiKey || '',
-              type: server.type,
-              command: server.command || '',
-              args: server.args || []
-            })
-          })
-
-          if (response.ok) {
-            successCount++
-            // Update local config for subsequent duplicate checks
-            const newServer = await response.json()
-            setMCPConfig(prev => ({
-              ...prev,
-              servers: [...prev.servers, newServer.server]
-            }))
-          } else {
-            errorCount++
-          }
-        } catch (error) {
-          errorCount++
-          console.error('Error importing MCP server:', error)
+        const existing = mcpConfig.servers.find(s => s.name === server.name)
+        let nameToUse = server.name
+        if (existing) {
+          const s1 = { type: existing.type, url: existing.url || '', command: existing.command || '', args: JSON.stringify(existing.args || []) }
+          const s2 = { type: server.type, url: server.url || '', command: server.command || '', args: JSON.stringify(server.args || []) }
+          if (JSON.stringify(s1) === JSON.stringify(s2)) { duplicateCount++; continue }
+          let n = 1; let t = `${server.name}-duplicate-${n}`
+          while (mcpConfig.servers.find(s => s.name === t)) { n++; t = `${server.name}-duplicate-${n}` }
+          nameToUse = t
         }
+        const res = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nameToUse, url: server.url || '', apiKey: server.apiKey || '', type: server.type, command: server.command || '', args: server.args || [] }) })
+        if (res.ok) { successCount++; const d = await res.json(); setMCPConfig(prev => ({ ...prev, servers: [...prev.servers, d.server] })) } else errorCount++
       }
-
       await loadMCPConfig()
-      
-      let message = `Imported ${successCount} MCP servers`
-      if (duplicateCount > 0) {
-        message += `, skipped ${duplicateCount} identical`
-      }
-      if (errorCount > 0) {
-        message += `, ${errorCount} failed`
-      }
-      
-      setMessage({ 
-        type: errorCount > 0 ? 'info' : 'success', 
-        text: message 
-      })
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to parse JSON file' })
-      console.error('Import error:', error)
-    } finally {
-      // Reset file input
-      if (mcpFileInputRef.current) {
-        mcpFileInputRef.current.value = ''
-      }
-    }
+      let msg = `Imported ${successCount} servers`
+      if (duplicateCount > 0) msg += `, skipped ${duplicateCount} identical`
+      if (errorCount > 0) msg += `, ${errorCount} failed`
+      setMessage({ type: errorCount > 0 ? 'info' : 'success', text: msg })
+    } catch { setMessage({ type: 'error', text: 'Failed to parse file' }) }
+    finally { if (mcpFileInputRef.current) mcpFileInputRef.current.value = '' }
   }
 
-  // Slack Functions
   const loadSlackConfig = async () => {
     setIsLoadingSlack(true)
     try {
@@ -1219,1337 +580,636 @@ export default function ConfigPage() {
         setSlackStatus(data)
         setSlackForm(f => ({ ...f, channelId: data.slackChannelId }))
       }
-    } catch (error) {
-      console.error('Error loading Slack config:', error)
-    } finally {
-      setIsLoadingSlack(false)
-    }
+    } catch {} finally { setIsLoadingSlack(false) }
   }
 
   const handleSaveSlack = async () => {
     setIsSavingSlack(true)
     try {
       const res = await fetch('/api/slack', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slackEnabled: slackStatus.slackEnabled,
-          slackChannelId: slackForm.channelId,
-          slackPingType: slackStatus.slackPingType,
-          botToken: slackForm.botToken || undefined,
-          appToken: slackForm.appToken || undefined
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slackEnabled: slackStatus.slackEnabled, slackChannelId: slackForm.channelId, slackPingType: slackStatus.slackPingType, botToken: slackForm.botToken || undefined, appToken: slackForm.appToken || undefined })
       })
-      if (res.ok) {
-        setMessage({ type: 'success', text: 'Slack configuration saved.' })
-        setSlackForm(f => ({ ...f, botToken: '', appToken: '' }))
-        await loadSlackConfig()
-      } else {
-        setMessage({ type: 'error', text: 'Failed to save Slack configuration.' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to save Slack configuration.' })
-      console.error(error)
-    } finally {
-      setIsSavingSlack(false)
-    }
+      if (res.ok) { setMessage({ type: 'success', text: 'Slack configuration saved' }); setSlackForm(f => ({ ...f, botToken: '', appToken: '' })); await loadSlackConfig() }
+      else setMessage({ type: 'error', text: 'Failed to save Slack config' })
+    } catch { setMessage({ type: 'error', text: 'Failed to save Slack config' }) }
+    finally { setIsSavingSlack(false) }
   }
 
+  const handleTestSlack = async () => {
+    try {
+      const res = await fetch('/api/slack', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'test' }) })
+      const data = await res.json()
+      setSlackTestResult(data)
+    } catch { setSlackTestResult({ ok: false, error: 'Connection failed' }) }
+  }
+
+  // Toggle switch component
+  const Toggle = ({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
+      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed ${checked ? 'bg-white' : 'bg-[#333]'}`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-black shadow transition duration-200 ease-in-out mt-0.5 ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+    </button>
+  )
+
   return (
-    <main className="min-h-screen bg-gray-50 text-black font-sans selection:bg-black selection:text-white">
-      <div className="container mx-auto px-6 py-16 max-w-6xl">
+    <main className="min-h-screen bg-black text-white">
+      {/* Top nav */}
+      <nav className="border-b border-[#1a1a1a] px-6 h-14 flex items-center gap-3">
+        <img src="/logo.jpg" className="w-6 h-6 rounded object-cover" alt="Photon" />
+        <Link href="/" className="text-sm text-[#888] hover:text-white transition-colors flex items-center gap-1.5">
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Dashboard
+        </Link>
+        <span className="text-[#333]">/</span>
+        <span className="text-sm text-white">Knowledge Base</span>
+      </nav>
+
+      <div className="max-w-6xl mx-auto px-6 py-10">
         {/* Header */}
-        <div className="flex justify-between items-center mb-16">
-          <div>
-            <Link href="/" className="text-sm font-medium text-gray-500 hover:text-black transition-colors flex items-center gap-2 mb-4">
-              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-            </Link>
-            <h1 className="text-4xl font-bold tracking-tight mb-2 text-black">
-              Knowledge Base
-            </h1>
-            <p className="text-lg text-gray-500 max-w-2xl leading-relaxed">
-              Manage your AI agent's intelligence. Connect your website or upload documents to train the assistant.
-            </p>
-          </div>
-          <div className="hidden md:block">
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-               <div className="text-sm font-medium text-gray-900">Training Status</div>
-               <div className="flex items-center gap-2 mt-1">
-                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                 <span className="text-xs text-gray-500">Active & Ready</span>
-               </div>
-            </div>
-          </div>
+        <div className="mb-10">
+          <h1 className="text-2xl font-semibold tracking-tight text-white mb-1">Knowledge Base</h1>
+          <p className="text-sm text-[#555]">Train your agent by connecting your website or uploading documents.</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* Left Column - Configuration */}
-          <div className="lg:col-span-7 space-y-8">
-            {/* Website Scraper Card */}
-            <div className="bg-white border border-gray-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-shadow duration-300">
-              <div className="flex items-start justify-between mb-8">
-                <div>
-                   <h2 className="text-xl font-semibold mb-1">Website Scraper</h2>
-                   <p className="text-sm text-gray-500">Auto-crawl your documentation site</p>
-                </div>
-              </div>
+        {/* Message */}
+        {message && (
+          <div className={`mb-6 rounded-lg border px-4 py-3 flex items-center gap-3 text-sm ${
+            message.type === 'success' ? 'border-[#00c950]/20 bg-[#00c950]/5 text-[#00c950]' :
+            message.type === 'error' ? 'border-[#ff4444]/20 bg-[#ff4444]/5 text-[#ff4444]' :
+            'border-blue-500/20 bg-blue-500/5 text-blue-400'
+          }`}>
+            {message.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0" /> :
+             message.type === 'error' ? <AlertTriangle className="w-4 h-4 flex-shrink-0" /> :
+             <Info className="w-4 h-4 flex-shrink-0" />}
+            <span>{message.text}</span>
+            <button onClick={() => setMessage(null)} className="ml-auto text-current opacity-50 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
+          </div>
+        )}
 
-              {/* Website URL Input */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium mb-2 text-gray-700">
-                  Website URL
-                </label>
-                <div className="relative">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left column */}
+          <div className="lg:col-span-7 space-y-6">
+
+            {/* Website Scraper */}
+            <div className="rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] overflow-hidden">
+              <div className="px-6 py-4 border-b border-[#1a1a1a] flex items-center justify-between">
+                <SectionHeader icon={<Globe className="w-4 h-4" />} title="Website Scraper" desc="Auto-crawl your documentation site" />
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs text-[#555] mb-1.5 uppercase tracking-wider">Website URL</label>
                   <input
-                    type="url"
-                    value={config.websiteUrl}
+                    type="url" value={config.websiteUrl}
                     onChange={(e) => setConfig({ ...config, websiteUrl: e.target.value })}
                     onBlur={(e) => {
-                      // Normalize URL on blur - add https:// if no protocol
                       let url = e.target.value.trim()
-                      if (url && !url.match(/^https?:\/\//i)) {
-                        url = `https://${url}`
-                        setConfig({ ...config, websiteUrl: url })
-                      }
+                      if (url && !url.match(/^https?:\/\//i)) setConfig({ ...config, websiteUrl: `https://${url}` })
                     }}
-                    placeholder="example.com or https://example.com"
-                    className="w-full pl-4 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
+                    placeholder="example.com"
+                    className={inp}
                     disabled={isLoading}
                   />
                 </div>
-                <p className="mt-2 text-xs text-gray-500">
-                  💡 You can enter just the domain - we'll add https:// automatically
-                </p>
-              </div>
 
-              <div className="grid grid-cols-2 gap-6 mb-8">
-                {/* Subdomain Toggle */}
-                <div>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className="relative inline-flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={config.includeSameOriginSubdomains}
-                        onChange={(e) => setConfig({ ...config, includeSameOriginSubdomains: e.target.checked })}
-                        className="sr-only peer"
-                        disabled={isLoading}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-black/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                    </div>
-                    <div>
-                      <span className="block text-sm font-medium text-gray-900 group-hover:text-black">Include Subdomains</span>
-                      <span className="block text-xs text-gray-500 mt-0.5 leading-relaxed">Scrape related sites like blog. or docs.</span>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Max Depth */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">
-                    Crawl Depth: <span className="text-black">{config.maxDepth}</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="5"
-                    value={config.maxDepth}
-                    onChange={(e) => setConfig({ ...config, maxDepth: parseInt(e.target.value) || 3 })}
-                    className="w-full accent-black h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                    disabled={isLoading}
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>1 (Fast)</span>
-                    <span>5 (Deep)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Auto Update Settings */}
-              <div className="mb-6 p-4 border border-gray-100 rounded-xl bg-gray-50/60">
-                <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">Auto Update Knowledge Base</p>
-                    <p className="text-xs text-gray-500 mt-1">Automatically crawl and update changed pages on a schedule.</p>
+                    <label className="flex items-center justify-between text-xs text-[#555] mb-2 uppercase tracking-wider">
+                      <span>Include Subdomains</span>
+                      <Toggle checked={config.includeSameOriginSubdomains} onChange={(v) => setConfig({ ...config, includeSameOriginSubdomains: v })} disabled={isLoading} />
+                    </label>
+                    <p className="text-xs text-[#444]">Crawl blog., docs., etc.</p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoUpdateForm.enabled}
-                      onChange={(e) => setAutoUpdateForm(f => ({ ...f, enabled: e.target.checked }))}
-                      className="sr-only peer"
-                      disabled={isLoading || isSavingAutoUpdate}
+                  <div>
+                    <label className="block text-xs text-[#555] mb-2 uppercase tracking-wider">
+                      Crawl Depth: <span className="text-white font-mono">{config.maxDepth}</span>
+                    </label>
+                    <input type="range" min="1" max="5" value={config.maxDepth}
+                      onChange={(e) => setConfig({ ...config, maxDepth: parseInt(e.target.value) || 3 })}
+                      className="w-full h-1 bg-[#222] rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:appearance-none"
+                      disabled={isLoading}
                     />
-                    <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-black after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-                  </label>
+                    <div className="flex justify-between text-[10px] text-[#444] mt-1 font-mono">
+                      <span>1 fast</span><span>5 deep</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-end gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium mb-1 text-gray-600">Interval (minutes)</label>
-                    <input
-                      type="number"
-                      min={5}
-                      max={1440}
-                      value={autoUpdateForm.intervalMinutes}
-                      onChange={(e) => setAutoUpdateForm(f => ({ ...f, intervalMinutes: Math.max(5, Number(e.target.value) || 60) }))}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                      disabled={isSavingAutoUpdate}
-                    />
+                {/* Auto update */}
+                <div className="rounded-lg border border-[#1a1a1a] bg-black p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-medium text-white">Auto Update</div>
+                      <div className="text-[11px] text-[#555] mt-0.5">Crawl on a schedule</div>
+                    </div>
+                    <Toggle checked={autoUpdateForm.enabled} onChange={(v) => setAutoUpdateForm(f => ({ ...f, enabled: v }))} disabled={isLoading || isSavingAutoUpdate} />
                   </div>
-                  <button
-                    onClick={handleSaveAutoUpdate}
-                    disabled={isSavingAutoUpdate || !config.websiteUrl}
-                    className="px-4 py-2 bg-black text-white text-sm rounded-lg hover:bg-gray-800 disabled:opacity-50"
-                  >
-                    {isSavingAutoUpdate ? 'Saving...' : 'Apply Auto Update'}
-                  </button>
-                  <button
-                    onClick={handleRunAutoUpdateNow}
-                    disabled={!config.websiteUrl || autoUpdateStatus?.running}
-                    className="px-4 py-2 bg-gray-100 text-gray-800 text-sm rounded-lg hover:bg-gray-200 disabled:opacity-50"
-                  >
-                    Run Now
-                  </button>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-[#555] mb-1 uppercase tracking-wider">Interval (min)</label>
+                      <input type="number" min={5} max={1440} value={autoUpdateForm.intervalMinutes}
+                        onChange={(e) => setAutoUpdateForm(f => ({ ...f, intervalMinutes: Math.max(5, Number(e.target.value) || 60) }))}
+                        className={`${inpSm} w-full`} disabled={isSavingAutoUpdate}
+                      />
+                    </div>
+                    <button onClick={handleSaveAutoUpdate} disabled={isSavingAutoUpdate || !config.websiteUrl} className={btnSecondary}>
+                      {isSavingAutoUpdate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Apply
+                    </button>
+                    <button onClick={handleRunAutoUpdateNow} disabled={!config.websiteUrl || autoUpdateStatus?.running} className={btnSecondary}>
+                      Run Now
+                    </button>
+                  </div>
+                  {autoUpdateStatus && (
+                    <p className="text-[10px] text-[#444] font-mono">
+                      {autoUpdateStatus.running ? 'Running...' : autoUpdateStatus.enabled ? 'Enabled' : 'Disabled'}
+                      {autoUpdateStatus.lastRun ? ` · Last: ${new Date(autoUpdateStatus.lastRun).toLocaleString()}` : ''}
+                      {autoUpdateStatus.lastResult ? ` · New: ${autoUpdateStatus.lastResult.newPages}, Updated: ${autoUpdateStatus.lastResult.updatedPages}, Removed: ${autoUpdateStatus.lastResult.stalePagesRemoved}` : ''}
+                    </p>
+                  )}
                 </div>
 
-                {autoUpdateStatus && (
-                  <p className="mt-3 text-xs text-gray-500">
-                    Status: {autoUpdateStatus.running ? 'Running' : autoUpdateStatus.enabled ? 'Enabled' : 'Disabled'}
-                    {autoUpdateStatus.lastRun ? ` • Last run: ${new Date(autoUpdateStatus.lastRun).toLocaleString()}` : ''}
-                    {autoUpdateStatus.lastResult
-                      ? ` • New: ${autoUpdateStatus.lastResult.newPages}, Updated: ${autoUpdateStatus.lastResult.updatedPages}, Unchanged: ${autoUpdateStatus.lastResult.unchangedPages}, Removed: ${autoUpdateStatus.lastResult.stalePagesRemoved}`
-                      : ''}
-                  </p>
+                {/* Scrape progress */}
+                {scrapeProgress && (
+                  <div className="rounded-lg border border-[#222] bg-black p-4">
+                    <div className="flex justify-between items-end mb-2">
+                      <span className="text-2xl font-mono font-bold text-white">{scrapeProgress.current}</span>
+                      <span className="text-xs text-[#555] font-mono">/ {scrapeProgress.total || '?'}</span>
+                      <span className="w-2 h-2 rounded-full bg-[#00c950] animate-pulse" />
+                    </div>
+                    <div className="w-full bg-[#111] rounded-full h-0.5 mb-2">
+                      <div className="bg-white h-0.5 rounded-full transition-all" style={{ width: scrapeProgress.total ? `${(scrapeProgress.current / scrapeProgress.total) * 100}%` : '0%' }} />
+                    </div>
+                    <p className="text-[10px] font-mono text-[#444] truncate">{scrapeProgress.currentUrl}</p>
+                  </div>
                 )}
-              </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-4 border-t border-gray-50 pt-6">
-                <button
-                  onClick={handleScrape}
-                  disabled={isLoading || !config.websiteUrl}
-                  className="flex-1 bg-black text-white font-medium py-3 px-6 rounded-xl hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {isLoading ? 'Processing...' : 'Start Scraping'}
+                <button onClick={handleScrape} disabled={isLoading || !config.websiteUrl} className={`w-full justify-center ${btnPrimary}`}>
+                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+                  {isLoading ? 'Scraping...' : 'Start Scraping'}
                 </button>
               </div>
             </div>
 
-            {/* File Upload Card */}
-            <div className="bg-white border border-gray-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-shadow duration-300">
-              <div className="flex items-start justify-between mb-8">
-                <div>
-                   <h2 className="text-xl font-semibold mb-1">Document Upload</h2>
-                   <p className="text-sm text-gray-500">Upload PDF, DOCX, CSV, or Text files</p>
-                </div>
+            {/* File Upload */}
+            <div className="rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] overflow-hidden">
+              <div className="px-6 py-4 border-b border-[#1a1a1a]">
+                <SectionHeader icon={<CloudUpload className="w-4 h-4" />} title="Document Upload" desc="Upload PDF, DOCX, CSV, or text files" />
               </div>
-              
-              <div className="mb-6">
-                <label 
-                  htmlFor="file-upload"
-                  className="block w-full cursor-pointer group"
-                >
-                  <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center group-hover:border-black group-hover:bg-gray-50 transition-all duration-300">
+              <div className="p-6 space-y-4">
+                <label htmlFor="file-upload" className="block cursor-pointer">
+                  <div className={`border border-dashed rounded-lg p-8 text-center transition-colors ${uploadFiles?.length ? 'border-[#444] bg-[#111]' : 'border-[#222] hover:border-[#333] hover:bg-[#0f0f0f]'}`}>
                     {uploadFiles && uploadFiles.length > 0 ? (
-                      <div className="space-y-3">
-                        <div className="flex justify-center mb-2">
-                          <Paperclip className="w-8 h-8 text-black" />
-                        </div>
-                        <div className="font-medium text-lg">
-                          {uploadFiles.length} file{uploadFiles.length > 1 ? 's' : ''} selected
-                        </div>
-                        <div className="text-sm text-gray-500 max-w-xs mx-auto">
-                          {Array.from(uploadFiles).map(f => f.name).join(', ')}
-                        </div>
+                      <div className="space-y-2">
+                        <Paperclip className="w-6 h-6 text-white mx-auto" />
+                        <div className="text-sm font-medium text-white">{uploadFiles.length} file{uploadFiles.length > 1 ? 's' : ''} selected</div>
+                        <div className="text-xs text-[#555]">{Array.from(uploadFiles).map(f => f.name).join(', ')}</div>
                       </div>
                     ) : (
-                      <div className="space-y-4">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto text-2xl group-hover:scale-110 transition-transform">
-                          <CloudUpload className="w-8 h-8 text-gray-400 group-hover:text-black" />
-                        </div>
+                      <div className="space-y-3">
+                        <CloudUpload className="w-7 h-7 text-[#333] mx-auto" />
                         <div>
-                          <p className="font-medium text-lg text-gray-900">Click to upload documents</p>
-                          <p className="text-sm text-gray-500 mt-1">or drag and drop files here</p>
-                        </div>
-                        <div className="flex flex-wrap justify-center gap-2 mt-4">
-                           {['PDF', 'DOCX', 'CSV', 'TXT', 'MD'].map(ext => (
-                             <span key={ext} className="px-2 py-1 bg-gray-100 rounded-md text-xs font-medium text-gray-600 border border-gray-200">{ext}</span>
-                           ))}
+                          <p className="text-sm text-[#888]">Click to upload or drag & drop</p>
+                          <p className="text-xs text-[#444] mt-1">PDF, DOCX, CSV, TXT, MD</p>
                         </div>
                       </div>
                     )}
                   </div>
-                  <input
-                    id="file-upload"
-                    type="file"
-                    multiple
-                    onChange={handleFileSelect}
+                  <input id="file-upload" type="file" multiple onChange={handleFileSelect}
                     accept=".txt,.md,.markdown,.jpg,.jpeg,.png,.gif,.webp,.pdf,.csv,.json,.xml,.docx"
-                    className="hidden"
-                    disabled={isUploading}
-                  />
+                    className="hidden" disabled={isUploading} />
                 </label>
-              </div>
-
-              <button
-                onClick={handleUpload}
-                disabled={isUploading || !uploadFiles}
-                className="w-full bg-black text-white font-medium py-3.5 px-6 rounded-xl hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
-              >
-                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {isUploading ? 'Uploading & Processing...' : 'Upload Files'}
-              </button>
-            </div>
-            
-            {/* Message Display */}
-            {message && (
-              <div
-                className={`rounded-xl p-4 flex items-center gap-3 ${
-                  message.type === 'success'
-                    ? 'bg-green-50 text-green-900 border border-green-100'
-                    : message.type === 'error'
-                    ? 'bg-red-50 text-red-900 border border-red-100'
-                    : 'bg-blue-50 text-blue-900 border border-blue-100'
-                }`}
-              >
-                {message.type === 'success' ? (
-                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                ) : message.type === 'error' ? (
-                  <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                ) : (
-                  <Info className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                )}
-                <span className="text-sm font-medium">{message.text}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column - Status & Documents */}
-          <div className="lg:col-span-5 space-y-8">
-            {/* Scraping Progress */}
-            {scrapeProgress && (
-              <div className="bg-black text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-32 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-                <h3 className="text-sm font-medium text-gray-400 mb-6 uppercase tracking-wider">
-                  Scraping Status
-                </h3>
-                <div className="space-y-4 relative z-10">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <span className="text-4xl font-bold">{scrapeProgress.current}</span>
-                      <span className="text-gray-500 text-lg"> / {scrapeProgress.total || '?'}</span>
-                    </div>
-                    <div className="animate-pulse w-3 h-3 bg-green-500 rounded-full"></div>
-                  </div>
-                  <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-white h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: scrapeProgress.total
-                          ? `${(scrapeProgress.current / scrapeProgress.total) * 100}%`
-                          : '0%'
-                      }}
-                    />
-                  </div>
-                  <div className="text-xs text-gray-400 font-mono truncate">
-                    {scrapeProgress.currentUrl}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Documents List */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-0 overflow-hidden shadow-sm">
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                <h3 className="font-semibold text-gray-900">
-                  Indexed Knowledge
-                </h3>
-                <button
-                  onClick={handleRefresh}
-                  disabled={isLoadingDocs}
-                  className="p-2 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-all"
-                  title="Refresh List"
-                >
-                  {isLoadingDocs ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                <button onClick={handleUpload} disabled={isUploading || !uploadFiles} className={`w-full justify-center ${btnPrimary}`}>
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {isUploading ? 'Uploading...' : 'Upload Files'}
                 </button>
               </div>
+            </div>
+          </div>
 
-              <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+          {/* Right column - Documents */}
+          <div className="lg:col-span-5">
+            <div className="rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] overflow-hidden sticky top-6">
+              <div className="px-4 py-3 border-b border-[#1a1a1a] flex items-center justify-between">
+                <span className="text-xs font-medium text-white uppercase tracking-wider">Indexed Knowledge</span>
+                <button onClick={handleRefresh} disabled={isLoadingDocs} className="text-[#555] hover:text-white transition-colors p-1 rounded">
+                  {isLoadingDocs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <div className="max-h-[500px] overflow-y-auto">
                 {isLoadingDocs ? (
-                  <div className="p-12 text-center">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-gray-300" />
-                    <p className="text-gray-400 text-sm">Loading indices...</p>
-                  </div>
+                  <div className="p-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-[#333] mx-auto mb-2" /><p className="text-xs text-[#444]">Loading...</p></div>
                 ) : documents.length === 0 ? (
-                  <div className="p-12 text-center">
-                    <div className="flex justify-center mb-3">
-                      <FileText className="w-10 h-10 text-gray-200" />
-                    </div>
-                    <p className="text-gray-400 text-sm">No documents found.</p>
-                    <p className="text-xs text-gray-300 mt-1">Start by scraping or uploading.</p>
-                  </div>
+                  <div className="p-10 text-center"><FileText className="w-8 h-8 text-[#222] mx-auto mb-2" /><p className="text-xs text-[#444]">No documents indexed</p></div>
                 ) : (
-                  <div className="divide-y divide-gray-50">
+                  <div className="divide-y divide-[#111]">
                     {documents.map((doc) => (
-                      <div
-                        key={doc.name}
-                        className="group flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <button
-                          onClick={() => handleViewDocument(doc.name)}
-                          className="flex-1 min-w-0 mr-4 text-left"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center border
-                              ${doc.type === 'scraped' 
-                                ? 'bg-blue-50 border-blue-100 text-blue-600' 
-                                : doc.name.endsWith('.pdf')
-                                  ? 'bg-red-50 border-red-100 text-red-600'
-                                  : doc.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)
-                                    ? 'bg-purple-50 border-purple-100 text-purple-600'
-                                    : 'bg-gray-50 border-gray-100 text-gray-600'
-                              }
-                            `}>
-                              {doc.type === 'scraped' ? <Globe className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                      <div key={doc.name} className="group flex items-center justify-between px-4 py-3 hover:bg-[#0f0f0f] transition-colors">
+                        <button onClick={() => handleViewDocument(doc.name)} className="flex-1 min-w-0 text-left mr-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${doc.type === 'scraped' ? 'bg-blue-500/10 text-blue-400' : 'bg-[#1a1a1a] text-[#555]'}`}>
+                              {doc.type === 'scraped' ? <Globe className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm text-gray-900 truncate group-hover:text-black">
-                                {doc.name.replace(/^uploaded_/, '').replace(/^scraped_/, '')}
-                              </p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
-                                  {doc.name.split('.').pop()}
-                                </span>
-                                <span className="text-xs text-gray-400">
-                                  {(doc.size / 1024).toFixed(1)} KB
-                                </span>
-                              </div>
+                            <div className="min-w-0">
+                              <p className="text-xs text-white truncate font-mono">{doc.name.replace(/^uploaded_/, '').replace(/^scraped_/, '')}</p>
+                              <p className="text-[10px] text-[#444] mt-0.5">{(doc.size / 1024).toFixed(1)} KB</p>
                             </div>
                           </div>
                         </button>
-                        <button
-                          onClick={() => handleDeleteDocument(doc.name)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                          title={`Delete ${doc.name}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
+                        <button onClick={() => handleDeleteDocument(doc.name)} className="w-6 h-6 flex items-center justify-center rounded text-[#333] hover:text-[#ff4444] opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              
               {documents.length > 0 && (
-                 <div className="p-4 bg-gray-50 border-t border-gray-100">
-                  <button
-                    onClick={handleClearDocuments}
-                    className="w-full py-2 text-xs font-medium text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                  >
-                    Clear All Documents
+                <div className="px-4 py-3 border-t border-[#111]">
+                  <button onClick={handleClearDocuments} className="w-full text-xs text-[#ff4444]/50 hover:text-[#ff4444] transition-colors py-1.5 rounded hover:bg-[#ff4444]/5">
+                    Clear all documents
                   </button>
-                 </div>
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* SOPs Section */}
-        <div className="mt-12">
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                  <ClipboardList className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Standard Operating Procedures</h3>
-                  <p className="text-xs text-gray-500">Define workflows and agent behavior</p>
-                </div>
+        {/* SOPs */}
+        <div className="mt-8 rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#1a1a1a] flex items-center justify-between">
+            <SectionHeader icon={<ClipboardList className="w-4 h-4" />} title="Standard Operating Procedures" desc="Define workflows and agent behavior" />
+            <div className="flex items-center gap-2">
+              <button onClick={handleExportSOPs} disabled={sops.length === 0} className={btnSecondary}>
+                <Download className="w-3.5 h-3.5" /> Export
+              </button>
+              <button onClick={() => sopFileInputRef.current?.click()} className={btnSecondary}>
+                <Upload className="w-3.5 h-3.5" /> Import
+              </button>
+              <input ref={sopFileInputRef} type="file" accept=".json" onChange={handleImportSOPs} className="hidden" />
+              <button onClick={() => setShowNewSOPForm(!showNewSOPForm)} className={btnPrimary}>
+                <Plus className="w-3.5 h-3.5" /> Add SOP
+              </button>
+            </div>
+          </div>
+
+          {showNewSOPForm && (
+            <div className="p-6 border-b border-[#1a1a1a] bg-black space-y-4">
+              <input type="text" value={newSOP.title} onChange={(e) => setNewSOP({ ...newSOP, title: e.target.value })} placeholder="Title (e.g., Order Tracking SOP)" className={inp} />
+              <input type="text" value={newSOP.objective} onChange={(e) => setNewSOP({ ...newSOP, objective: e.target.value })} placeholder="Objective ,  what is the goal?" className={inp} />
+              <input type="text" value={newSOP.trigger} onChange={(e) => setNewSOP({ ...newSOP, trigger: e.target.value })} placeholder="Trigger ,  when should this activate?" className={inp} />
+              <div>
+                <label className="block text-[10px] text-[#555] uppercase tracking-wider mb-2">Steps</label>
+                {newSOP.steps.map((step, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] text-[#444] font-mono w-5 text-right flex-shrink-0">{i + 1}</span>
+                    <input type="text" value={step}
+                      onChange={(e) => { const steps = [...newSOP.steps]; steps[i] = e.target.value; setNewSOP({ ...newSOP, steps }) }}
+                      placeholder={`Step ${i + 1}`} className={`${inpSm} flex-1`}
+                    />
+                    {newSOP.steps.length > 1 && (
+                      <button onClick={() => setNewSOP({ ...newSOP, steps: newSOP.steps.filter((_, j) => j !== i) })} className="text-[#444] hover:text-[#ff4444] transition-colors flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={() => setNewSOP({ ...newSOP, steps: [...newSOP.steps, ''] })} className="text-xs text-[#555] hover:text-white transition-colors flex items-center gap-1 mt-1">
+                  <Plus className="w-3 h-3" /> Add step
+                </button>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleExportSOPs}
-                  disabled={sops.length === 0}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Export all SOPs as JSON"
-                >
-                  <Download className="w-4 h-4" />
-                  Export
-                </button>
-                <button
-                  onClick={() => sopFileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all"
-                  title="Import SOPs from JSON"
-                >
-                  <Upload className="w-4 h-4" />
-                  Import
-                </button>
-                <input
-                  ref={sopFileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleImportSOPs}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => setShowNewSOPForm(!showNewSOPForm)}
-                  className="flex items-center gap-2 px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add SOP
-                </button>
+              <div className="flex gap-2 pt-1">
+                <button onClick={handleAddSOP} className={btnPrimary}>Save SOP</button>
+                <button onClick={() => { setShowNewSOPForm(false); setNewSOP({ title: '', objective: '', trigger: '', steps: [''] }) }} className={btnGhost}>Cancel</button>
               </div>
             </div>
+          )}
 
-            {/* New SOP Form */}
-            {showNewSOPForm && (
-              <div className="p-6 border-b border-gray-200 bg-gray-50">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-700">Title</label>
-                    <input
-                      type="text"
-                      value={newSOP.title}
-                      onChange={(e) => setNewSOP({ ...newSOP, title: e.target.value })}
-                      placeholder="e.g., Order Tracking SOP"
-                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-700">Objective</label>
-                    <input
-                      type="text"
-                      value={newSOP.objective}
-                      onChange={(e) => setNewSOP({ ...newSOP, objective: e.target.value })}
-                      placeholder="What is the goal of this SOP?"
-                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-700">Trigger</label>
-                    <input
-                      type="text"
-                      value={newSOP.trigger}
-                      onChange={(e) => setNewSOP({ ...newSOP, trigger: e.target.value })}
-                      placeholder="When should this SOP be activated?"
-                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-700">Steps</label>
-                    {newSOP.steps.map((step, index) => (
-                      <div key={index} className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-medium text-gray-400 w-6">{index + 1}.</span>
-                        <input
-                          type="text"
-                          value={step}
-                          onChange={(e) => {
-                            const steps = [...newSOP.steps]
-                            steps[index] = e.target.value
-                            setNewSOP({ ...newSOP, steps })
-                          }}
-                          placeholder={`Step ${index + 1}`}
-                          className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all text-sm"
-                        />
-                        {newSOP.steps.length > 1 && (
-                          <button
-                            onClick={() => {
-                              const steps = newSOP.steps.filter((_, i) => i !== index)
-                              setNewSOP({ ...newSOP, steps })
-                            }}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => setNewSOP({ ...newSOP, steps: [...newSOP.steps, ''] })}
-                      className="text-sm text-gray-500 hover:text-black flex items-center gap-1 mt-2"
-                    >
-                      <Plus className="w-3 h-3" /> Add step
-                    </button>
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={handleAddSOP}
-                      className="flex-1 bg-black text-white font-medium py-2.5 px-4 rounded-lg hover:bg-gray-800 transition-all"
-                    >
-                      Save SOP
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowNewSOPForm(false)
-                        setNewSOP({ title: '', objective: '', trigger: '', steps: [''] })
-                      }}
-                      className="px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* SOPs List */}
-            <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
-              {isLoadingSOPs ? (
-                <div className="p-12 text-center">
-                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-gray-300" />
-                  <p className="text-gray-400 text-sm">Loading SOPs...</p>
-                </div>
-              ) : sops.length === 0 ? (
-                <div className="p-12 text-center">
-                  <div className="flex justify-center mb-3">
-                    <ClipboardList className="w-10 h-10 text-gray-200" />
-                  </div>
-                  <p className="text-gray-400 text-sm">No SOPs configured.</p>
-                  <p className="text-xs text-gray-300 mt-1">Add your first SOP to define agent behavior.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {sops.map((sop) => (
-                    <div key={sop.id} className="group">
-                      <div
-                        className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors cursor-pointer"
-                        onClick={() => setExpandedSOP(expandedSOP === sop.id ? null : sop.id)}
-                      >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleToggleSOP(sop.id, !sop.enabled)
-                            }}
-                            className={`w-10 h-6 rounded-full transition-all p-1 ${
-                              sop.enabled ? 'bg-green-500' : 'bg-gray-300'
-                            }`}
-                          >
-                            <div className={`w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${
-                              sop.enabled ? 'translate-x-4' : 'translate-x-0'
-                            }`} />
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-sm text-gray-900 truncate">{sop.title}</p>
-                              {('isDefault' in sop) && (sop as any).isDefault && (
-                                <span className="text-xs bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full font-medium">Default</span>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500 truncate mt-0.5">{sop.objective}</p>
+          <div className="max-h-[500px] overflow-y-auto">
+            {isLoadingSOPs ? (
+              <div className="p-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-[#333] mx-auto mb-2" /><p className="text-xs text-[#444]">Loading SOPs...</p></div>
+            ) : sops.length === 0 ? (
+              <div className="p-10 text-center"><ClipboardList className="w-8 h-8 text-[#222] mx-auto mb-2" /><p className="text-xs text-[#444]">No SOPs configured</p></div>
+            ) : (
+              <div className="divide-y divide-[#111]">
+                {sops.map((sop) => (
+                  <div key={sop.id} className="group">
+                    <div className="flex items-center justify-between px-6 py-3.5 hover:bg-[#0f0f0f] transition-colors cursor-pointer" onClick={() => setExpandedSOP(expandedSOP === sop.id ? null : sop.id)}>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleToggleSOP(sop.id, !sop.enabled) }}
+                          className={`w-8 h-5 rounded-full p-0.5 transition-colors flex-shrink-0 ${sop.enabled ? 'bg-white' : 'bg-[#333]'}`}>
+                          <div className={`w-4 h-4 rounded-full bg-black transition-transform ${sop.enabled ? 'translate-x-3' : 'translate-x-0'}`} />
+                        </button>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm text-white truncate">{sop.title}</p>
+                            {('isDefault' in sop) && (sop as any).isDefault && <span className="text-[10px] bg-[#1a1a1a] text-[#555] px-1.5 py-0.5 rounded font-mono">default</span>}
                           </div>
+                          <p className="text-xs text-[#444] truncate mt-0.5">{sop.objective}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleStartEditSOP(sop)
-                            }}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
-                            title="Edit SOP"
-                          >
-                            <FileEdit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteSOP(sop.id)
-                            }}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          {expandedSOP === sop.id ? (
-                            <ChevronUp className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <div className="flex items-center gap-1 ml-2">
+                        <button onClick={(e) => { e.stopPropagation(); handleStartEditSOP(sop) }} className="w-7 h-7 flex items-center justify-center rounded text-[#333] hover:text-[#888] opacity-0 group-hover:opacity-100 transition-all"><FileEdit className="w-3.5 h-3.5" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteSOP(sop.id) }} className="w-7 h-7 flex items-center justify-center rounded text-[#333] hover:text-[#ff4444] opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                        {expandedSOP === sop.id ? <ChevronUp className="w-3.5 h-3.5 text-[#333]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#333]" />}
+                      </div>
+                    </div>
+
+                    {expandedSOP === sop.id && (
+                      <div className="px-6 pb-5 bg-black">
+                        <div className="pl-11 space-y-3">
+                          {editingSOPId === sop.id ? (
+                            <>
+                              <div><label className="block text-[10px] text-[#444] uppercase tracking-wider mb-1">Title</label><input type="text" value={editingSOP.title} onChange={(e) => setEditingSOP({ ...editingSOP, title: e.target.value })} className={inp} /></div>
+                              <div><label className="block text-[10px] text-[#444] uppercase tracking-wider mb-1">Objective</label><textarea value={editingSOP.objective} onChange={(e) => setEditingSOP({ ...editingSOP, objective: e.target.value })} rows={2} className={`${inp} resize-y`} /></div>
+                              <div><label className="block text-[10px] text-[#444] uppercase tracking-wider mb-1">Trigger</label><textarea value={editingSOP.trigger} onChange={(e) => setEditingSOP({ ...editingSOP, trigger: e.target.value })} rows={2} className={`${inp} resize-y`} /></div>
+                              <div>
+                                <label className="block text-[10px] text-[#444] uppercase tracking-wider mb-2">Steps</label>
+                                {editingSOP.steps.map((step, idx) => (
+                                  <div key={idx} className="flex gap-2 mb-2">
+                                    <span className="w-6 h-8 bg-[#111] border border-[#222] rounded flex items-center justify-center text-[10px] font-mono text-[#444] flex-shrink-0">{idx + 1}</span>
+                                    <textarea value={step} onChange={(e) => { const steps = [...editingSOP.steps]; steps[idx] = e.target.value; setEditingSOP({ ...editingSOP, steps }) }} rows={2} className={`${inp} flex-1 resize-y`} />
+                                    {editingSOP.steps.length > 1 && <button onClick={() => setEditingSOP({ ...editingSOP, steps: editingSOP.steps.filter((_, i) => i !== idx) })} className="w-8 h-8 flex items-center justify-center rounded text-[#444] hover:text-[#ff4444] transition-colors"><X className="w-3.5 h-3.5" /></button>}
+                                  </div>
+                                ))}
+                                <button onClick={() => setEditingSOP({ ...editingSOP, steps: [...editingSOP.steps, ''] })} className="text-xs text-[#555] hover:text-white transition-colors flex items-center gap-1">
+                                  <Plus className="w-3 h-3" /> Add step
+                                </button>
+                              </div>
+                              <div className="flex gap-2 pt-1">
+                                <button onClick={() => handleSaveSOPEdit(sop.id)} className={btnPrimary}>Save Changes</button>
+                                <button onClick={handleCancelEditSOP} className={btnGhost}>Cancel</button>
+                              </div>
+                            </>
                           ) : (
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                            <>
+                              <div><p className="text-[10px] text-[#444] uppercase tracking-wider mb-1">Trigger</p><p className="text-sm text-[#888]">{sop.trigger}</p></div>
+                              <div>
+                                <p className="text-[10px] text-[#444] uppercase tracking-wider mb-2">Steps</p>
+                                <ol className="space-y-2">
+                                  {sop.steps.map((step, idx) => (
+                                    <li key={idx} className="flex items-start gap-2 text-sm text-[#888]">
+                                      <span className="w-5 h-5 bg-[#111] border border-[#222] rounded-full flex items-center justify-center text-[10px] font-mono text-[#444] flex-shrink-0 mt-0.5">{idx + 1}</span>
+                                      <span>{step}</span>
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
+                            </>
                           )}
                         </div>
                       </div>
-                      {expandedSOP === sop.id && (
-                        <div className="px-4 pb-4 bg-gray-50/50">
-                          <div className="ml-13 pl-10 space-y-3">
-                            {editingSOPId === sop.id ? (
-                              <>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Title</p>
-                                  <input
-                                    type="text"
-                                    value={editingSOP.title}
-                                    onChange={(e) => setEditingSOP({ ...editingSOP, title: e.target.value })}
-                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  />
-                                </div>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Objective</p>
-                                  <textarea
-                                    value={editingSOP.objective}
-                                    onChange={(e) => setEditingSOP({ ...editingSOP, objective: e.target.value })}
-                                    rows={3}
-                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                                  />
-                                </div>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Trigger</p>
-                                  <textarea
-                                    value={editingSOP.trigger}
-                                    onChange={(e) => setEditingSOP({ ...editingSOP, trigger: e.target.value })}
-                                    rows={2}
-                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                                  />
-                                </div>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Steps</p>
-                                  <div className="space-y-2">
-                                    {editingSOP.steps.map((step, idx) => (
-                                      <div key={idx} className="flex gap-2">
-                                        <span className="w-8 h-9 bg-gray-200 rounded-lg flex items-center justify-center text-xs font-medium text-gray-600 flex-shrink-0">
-                                          {idx + 1}
-                                        </span>
-                                        <textarea
-                                          value={step}
-                                          onChange={(e) => {
-                                            const steps = [...editingSOP.steps]
-                                            steps[idx] = e.target.value
-                                            setEditingSOP({ ...editingSOP, steps })
-                                          }}
-                                          rows={2}
-                                          className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                                        />
-                                        {editingSOP.steps.length > 1 && (
-                                          <button
-                                            onClick={() => {
-                                              const steps = editingSOP.steps.filter((_, i) => i !== idx)
-                                              setEditingSOP({ ...editingSOP, steps })
-                                            }}
-                                            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
-                                            title="Remove step"
-                                          >
-                                            <X className="w-4 h-4" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <button
-                                    onClick={() => setEditingSOP({ ...editingSOP, steps: [...editingSOP.steps, ''] })}
-                                    className="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                                  >
-                                    + Add Step
-                                  </button>
-                                </div>
-                                <div className="flex items-center gap-2 pt-1">
-                                  <button
-                                    onClick={() => handleSaveSOPEdit(sop.id)}
-                                    className="px-3 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-all"
-                                  >
-                                    Save Changes
-                                  </button>
-                                  <button
-                                    onClick={handleCancelEditSOP}
-                                    className="px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg text-sm transition-all"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Trigger</p>
-                                  <p className="text-sm text-gray-700">{sop.trigger}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Steps</p>
-                                  <ol className="space-y-2">
-                                    {sop.steps.map((step, idx) => (
-                                      <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
-                                        <span className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-600 flex-shrink-0 mt-0.5">
-                                          {idx + 1}
-                                        </span>
-                                        <span>{step}</span>
-                                      </li>
-                                    ))}
-                                  </ol>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* MCP Connector Section */}
-        <div className="mt-12">
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <Plug className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">MCP Connector</h3>
-                  <p className="text-xs text-gray-500">Connect external tools and services</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleToggleMCP(!mcpConfig.enabled)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                    mcpConfig.enabled 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {mcpConfig.enabled ? (
-                    <>
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      Active
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-2 h-2 rounded-full bg-gray-400" />
-                      Disabled
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleExportMCP}
-                  disabled={mcpConfig.servers.length === 0}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Export MCP configuration as JSON"
-                >
-                  <Download className="w-4 h-4" />
-                  Export
-                </button>
-                <button
-                  onClick={() => mcpFileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all"
-                  title="Import MCP servers from JSON"
-                >
-                  <Upload className="w-4 h-4" />
-                  Import
-                </button>
-                <input
-                  ref={mcpFileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleImportMCP}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => setShowNewMCPForm(!showNewMCPForm)}
-                  className="flex items-center gap-2 px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Server
-                </button>
-              </div>
-            </div>
-
-            {/* New MCP Server Form */}
-            {showNewMCPForm && (
-              <div className="p-6 border-b border-gray-200 bg-gray-50">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1 text-gray-700">Server Name</label>
-                      <input
-                        type="text"
-                        value={newMCPServer.name}
-                        onChange={(e) => setNewMCPServer({ ...newMCPServer, name: e.target.value })}
-                        placeholder="e.g., Zendesk, Stripe"
-                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1 text-gray-700">Transport Type</label>
-                      <select
-                        value={newMCPServer.type}
-                        onChange={(e) => setNewMCPServer({ ...newMCPServer, type: e.target.value as 'stdio' | 'sse' | 'streamable-http' })}
-                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                      >
-                        <option value="sse">SSE (Server-Sent Events)</option>
-                        <option value="streamable-http">Streamable HTTP</option>
-                        <option value="stdio">Stdio (Local Process)</option>
-                      </select>
-                    </div>
+                    )}
                   </div>
-                  
-                  {newMCPServer.type === 'stdio' ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-1 text-gray-700">Command</label>
-                        <input
-                          type="text"
-                          value={newMCPServer.command}
-                          onChange={(e) => setNewMCPServer({ ...newMCPServer, command: e.target.value })}
-                          placeholder="e.g., npx, uvx"
-                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1 text-gray-700">Arguments (space-separated)</label>
-                        <input
-                          type="text"
-                          value={newMCPServer.args}
-                          onChange={(e) => setNewMCPServer({ ...newMCPServer, args: e.target.value })}
-                          placeholder="e.g., -y @modelcontextprotocol/server-github"
-                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-sm font-medium mb-1 text-gray-700">Server URL</label>
-                      <input
-                        type="url"
-                        value={newMCPServer.url}
-                        onChange={(e) => setNewMCPServer({ ...newMCPServer, url: e.target.value })}
-                        placeholder="https://api.example.com/mcp"
-                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                      />
-                    </div>
-                  )}
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-700">API Key (optional)</label>
-                    <input
-                      type="password"
-                      value={newMCPServer.apiKey}
-                      onChange={(e) => setNewMCPServer({ ...newMCPServer, apiKey: e.target.value })}
-                      placeholder="Optional authentication key"
-                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                    />
-                  </div>
-                  
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={handleAddMCPServer}
-                      className="flex-1 bg-black text-white font-medium py-2.5 px-4 rounded-lg hover:bg-gray-800 transition-all"
-                    >
-                      Add Server
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowNewMCPForm(false)
-                        setNewMCPServer({ name: '', url: '', apiKey: '', type: 'sse', command: '', args: '' })
-                      }}
-                      className="px-4 py-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MCP Servers List */}
-            <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-              {isLoadingMCP ? (
-                <div className="p-12 text-center">
-                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3 text-gray-300" />
-                  <p className="text-gray-400 text-sm">Loading MCP servers...</p>
-                </div>
-              ) : mcpConfig.servers.length === 0 ? (
-                <div className="p-12 text-center">
-                  <div className="flex justify-center mb-3">
-                    <Server className="w-10 h-10 text-gray-200" />
-                  </div>
-                  <p className="text-gray-400 text-sm">No MCP servers configured.</p>
-                  <p className="text-xs text-gray-300 mt-1">Connect to external tools like CRMs, ticketing systems, and APIs.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-50">
-                  {mcpConfig.servers.map((server) => (
-                    <div
-                      key={server.id}
-                      className="group flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <button
-                          onClick={() => handleToggleMCPServer(server.id, !server.enabled)}
-                          className={`w-10 h-6 rounded-full transition-all p-1 ${
-                            server.enabled ? 'bg-green-500' : 'bg-gray-300'
-                          }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${
-                            server.enabled ? 'translate-x-4' : 'translate-x-0'
-                          }`} />
-                        </button>
-                        <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                          <Server className="w-4 h-4 text-purple-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-gray-900 truncate">{server.name}</p>
-                          <p className="text-xs text-gray-500 truncate mt-0.5">
-                            {server.type === 'stdio' ? `${server.command} ${server.args?.join(' ')}` : server.url}
-                          </p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          server.type === 'sse' 
-                            ? 'bg-blue-100 text-blue-700' 
-                            : server.type === 'streamable-http'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {server.type.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 ml-2">
-                        {server.type !== 'stdio' && server.url && (
-                          <button
-                            onClick={() => handleTestMCPServer(server.id, server.url)}
-                            className="text-xs px-2 py-1 rounded-md text-gray-400 hover:text-purple-600 hover:bg-purple-50 opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            {mcpTestResults[server.id] === null ? '...' : 'Test'}
-                          </button>
-                        )}
-                        {mcpTestResults[server.id] != null && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${mcpTestResults[server.id]?.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {mcpTestResults[server.id]?.ok ? `${mcpTestResults[server.id]?.toolCount} tools` : mcpTestResults[server.id]?.error?.slice(0, 30)}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => handleDeleteMCPServer(server.id)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {mcpConfig.lastUpdated && (
-              <div className="p-3 bg-gray-50 border-t border-gray-100 text-center">
-                <p className="text-xs text-gray-400">
-                  Last updated: {new Date(mcpConfig.lastUpdated).toLocaleString()}
-                </p>
+                ))}
               </div>
             )}
           </div>
         </div>
-        
-        {/* Slack Integration Section */}
-        <div className="mt-12">
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Slack Integration</h3>
-                  <p className="text-xs text-gray-500">Route human handoffs to a Slack channel</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setSlackStatus(s => ({ ...s, slackEnabled: !s.slackEnabled }))
-                }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  slackStatus.slackEnabled
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
-                {slackStatus.slackEnabled ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    Enabled
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-gray-400" />
-                    Disabled
-                  </>
-                )}
+
+        {/* MCP Connector */}
+        <div className="mt-8 rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#1a1a1a] flex items-center justify-between">
+            <SectionHeader icon={<Plug className="w-4 h-4" />} title="MCP Connector" desc="Connect external tools and services" />
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleToggleMCP(!mcpConfig.enabled)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${mcpConfig.enabled ? 'bg-[#00c950]/10 border-[#00c950]/20 text-[#00c950]' : 'bg-[#111] border-[#222] text-[#555] hover:border-[#333]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${mcpConfig.enabled ? 'bg-[#00c950] animate-pulse' : 'bg-[#333]'}`} />
+                {mcpConfig.enabled ? 'Active' : 'Disabled'}
               </button>
+              <button onClick={handleExportMCP} disabled={mcpConfig.servers.length === 0} className={btnSecondary}><Download className="w-3.5 h-3.5" /> Export</button>
+              <button onClick={() => mcpFileInputRef.current?.click()} className={btnSecondary}><Upload className="w-3.5 h-3.5" /> Import</button>
+              <input ref={mcpFileInputRef} type="file" accept=".json" onChange={handleImportMCP} className="hidden" />
+              <button onClick={() => setShowNewMCPForm(!showNewMCPForm)} className={btnPrimary}><Plus className="w-3.5 h-3.5" /> Add Server</button>
             </div>
+          </div>
 
-            <div className="p-6 space-y-5">
-              {isLoadingSlack ? (
-                <div className="py-8 text-center">
-                  <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-300" />
+          {showNewMCPForm && (
+            <div className="p-6 border-b border-[#1a1a1a] bg-black space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">Server Name</label>
+                  <input type="text" value={newMCPServer.name} onChange={(e) => setNewMCPServer({ ...newMCPServer, name: e.target.value })} placeholder="e.g., Zendesk, Stripe" className={inp} />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">Transport</label>
+                  <select value={newMCPServer.type} onChange={(e) => setNewMCPServer({ ...newMCPServer, type: e.target.value as any })} className={`${inp} bg-[#0a0a0a]`}>
+                    <option value="sse">SSE</option>
+                    <option value="streamable-http">Streamable HTTP</option>
+                    <option value="stdio">Stdio</option>
+                  </select>
+                </div>
+              </div>
+              {newMCPServer.type === 'stdio' ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">Command</label><input type="text" value={newMCPServer.command} onChange={(e) => setNewMCPServer({ ...newMCPServer, command: e.target.value })} placeholder="npx, uvx" className={inp} /></div>
+                  <div><label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">Args (space-separated)</label><input type="text" value={newMCPServer.args} onChange={(e) => setNewMCPServer({ ...newMCPServer, args: e.target.value })} placeholder="-y @modelcontextprotocol/server-github" className={inp} /></div>
                 </div>
               ) : (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Bot Token */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Bot Token
-                        <span className="ml-1.5 text-xs font-normal text-gray-400">(xoxb-...)</span>
-                      </label>
-                      <div className="relative">
-                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                          type="password"
-                          value={slackForm.botToken}
-                          onChange={(e) => setSlackForm(f => ({ ...f, botToken: e.target.value }))}
-                          placeholder={slackStatus.botTokenSet ? '••••••••••••••••' : 'xoxb-...'}
-                          className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                        />
-                      </div>
-                      {slackStatus.botTokenSet && (
-                        <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> Token is set
-                        </p>
-                      )}
-                    </div>
+                <div><label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">Server URL</label><input type="url" value={newMCPServer.url} onChange={(e) => setNewMCPServer({ ...newMCPServer, url: e.target.value })} placeholder="https://api.example.com/mcp" className={inp} /></div>
+              )}
+              <div><label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">API Key (optional)</label><input type="password" value={newMCPServer.apiKey} onChange={(e) => setNewMCPServer({ ...newMCPServer, apiKey: e.target.value })} placeholder="Optional auth key" className={inp} /></div>
+              <div className="flex gap-2">
+                <button onClick={handleAddMCPServer} className={btnPrimary}>Add Server</button>
+                <button onClick={() => { setShowNewMCPForm(false); setNewMCPServer({ name: '', url: '', apiKey: '', type: 'sse', command: '', args: '' }) }} className={btnGhost}>Cancel</button>
+              </div>
+            </div>
+          )}
 
-                    {/* App Token */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        App Token
-                        <span className="ml-1.5 text-xs font-normal text-gray-400">(xapp-...)</span>
-                      </label>
-                      <div className="relative">
-                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                          type="password"
-                          value={slackForm.appToken}
-                          onChange={(e) => setSlackForm(f => ({ ...f, appToken: e.target.value }))}
-                          placeholder={slackStatus.appTokenSet ? '••••••••••••••••' : 'xapp-...'}
-                          className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                        />
-                      </div>
-                      {slackStatus.appTokenSet && (
-                        <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> Token is set
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-gray-400">Needs <code className="bg-gray-100 px-1 rounded">connections:write</code> scope for Socket Mode</p>
-                    </div>
-                  </div>
-
-                  {/* Channel ID */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Channel ID
-                      <span className="ml-1.5 text-xs font-normal text-gray-400">(C... - right-click a channel in Slack → Copy link)</span>
-                    </label>
-                    <div className="relative">
-                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="text"
-                        value={slackForm.channelId}
-                        onChange={(e) => setSlackForm(f => ({ ...f, channelId: e.target.value }))}
-                        placeholder="C0123456789"
-                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Handoff Ping */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Handoff Ping
-                      <span className="ml-1.5 text-xs font-normal text-gray-400">(sent with each new handoff alert)</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      {(['none', 'here', 'channel'] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          onClick={() => setSlackStatus(s => ({ ...s, slackPingType: opt }))}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                            slackStatus.slackPingType === opt
-                              ? 'bg-black text-white border-black'
-                              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
-                          }`}
-                        >
-                          {opt === 'none' ? 'No ping' : opt === 'here' ? '@here' : '@everyone'}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="mt-1.5 text-xs text-gray-400">
-                      {slackStatus.slackPingType === 'here' && 'Notifies active members in the channel.'}
-                      {slackStatus.slackPingType === 'channel' && 'Notifies all members in the channel.'}
-                      {slackStatus.slackPingType === 'none' && 'No notification ping ,  message posts silently.'}
-                    </p>
-                  </div>
-
-                  {/* Required Permissions Note */}
-                  <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-500 space-y-1">
-                    <p className="font-medium text-gray-700">Required bot token scopes</p>
-                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                      {['chat:write', 'channels:history', 'groups:history'].map(scope => (
-                        <code key={scope} className="bg-white border border-gray-200 px-2 py-0.5 rounded text-gray-600">{scope}</code>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleTestSlack}
-                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
-                      >
-                        Test Connection
+          <div className="max-h-[400px] overflow-y-auto">
+            {isLoadingMCP ? (
+              <div className="p-10 text-center"><Loader2 className="w-5 h-5 animate-spin text-[#333] mx-auto mb-2" /><p className="text-xs text-[#444]">Loading...</p></div>
+            ) : mcpConfig.servers.length === 0 ? (
+              <div className="p-10 text-center"><Server className="w-8 h-8 text-[#222] mx-auto mb-2" /><p className="text-xs text-[#444]">No MCP servers configured</p></div>
+            ) : (
+              <div className="divide-y divide-[#111]">
+                {mcpConfig.servers.map((server) => (
+                  <div key={server.id} className="group flex items-center justify-between px-6 py-3.5 hover:bg-[#0f0f0f] transition-colors">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <button type="button" onClick={() => handleToggleMCPServer(server.id, !server.enabled)} className={`w-8 h-5 rounded-full p-0.5 transition-colors flex-shrink-0 ${server.enabled ? 'bg-white' : 'bg-[#333]'}`}>
+                        <div className={`w-4 h-4 rounded-full bg-black transition-transform ${server.enabled ? 'translate-x-3' : 'translate-x-0'}`} />
                       </button>
-                      {slackTestResult && (
-                        <span className={`text-xs px-2 py-1 rounded-full ${slackTestResult.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {slackTestResult.ok ? `${slackTestResult.team} / @${slackTestResult.botName}` : slackTestResult.error}
+                      <div className="w-7 h-7 rounded-lg bg-[#111] border border-[#222] flex items-center justify-center flex-shrink-0">
+                        <Server className="w-3.5 h-3.5 text-[#555]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{server.name}</p>
+                        <p className="text-[10px] font-mono text-[#444] truncate mt-0.5">{server.type === 'stdio' ? `${server.command} ${server.args?.join(' ')}` : server.url}</p>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-mono border ${server.type === 'sse' ? 'border-blue-500/20 text-blue-400 bg-blue-500/5' : server.type === 'streamable-http' ? 'border-amber-500/20 text-amber-400 bg-amber-500/5' : 'border-[#222] text-[#555] bg-[#111]'}`}>
+                        {server.type}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      {server.type !== 'stdio' && server.url && (
+                        <button onClick={() => handleTestMCPServer(server.id, server.url)} className="text-[10px] px-2 py-1 rounded text-[#444] hover:text-[#888] hover:bg-[#111] opacity-0 group-hover:opacity-100 transition-all">
+                          {mcpTestResults[server.id] === null ? '...' : 'Test'}
+                        </button>
+                      )}
+                      {mcpTestResults[server.id] != null && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-mono ${mcpTestResults[server.id]?.ok ? 'bg-[#00c950]/10 text-[#00c950]' : 'bg-[#ff4444]/10 text-[#ff4444]'}`}>
+                          {mcpTestResults[server.id]?.ok ? `${mcpTestResults[server.id]?.toolCount} tools` : mcpTestResults[server.id]?.error?.slice(0, 25)}
                         </span>
                       )}
+                      <button onClick={() => handleDeleteMCPServer(server.id)} className="w-7 h-7 flex items-center justify-center rounded text-[#333] hover:text-[#ff4444] opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
-                    <button
-                      onClick={handleSaveSlack}
-                      disabled={isSavingSlack}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-all"
-                    >
-                      {isSavingSlack ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      {isSavingSlack ? 'Saving...' : 'Save'}
-                    </button>
                   </div>
-                </>
-              )}
+                ))}
+              </div>
+            )}
+          </div>
+          {mcpConfig.lastUpdated && (
+            <div className="px-6 py-2.5 border-t border-[#111]">
+              <p className="text-[10px] font-mono text-[#333]">Updated {new Date(mcpConfig.lastUpdated).toLocaleString()}</p>
             </div>
+          )}
+        </div>
+
+        {/* Slack Integration */}
+        <div className="mt-8 rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#1a1a1a] flex items-center justify-between">
+            <SectionHeader icon={<MessageSquare className="w-4 h-4" />} title="Slack Integration" desc="Route human handoffs to a Slack channel" />
+            <button onClick={() => setSlackStatus(s => ({ ...s, slackEnabled: !s.slackEnabled }))}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${slackStatus.slackEnabled ? 'bg-[#00c950]/10 border-[#00c950]/20 text-[#00c950]' : 'bg-[#111] border-[#222] text-[#555] hover:border-[#333]'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${slackStatus.slackEnabled ? 'bg-[#00c950] animate-pulse' : 'bg-[#333]'}`} />
+              {slackStatus.slackEnabled ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+
+          <div className="p-6">
+            {isLoadingSlack ? (
+              <div className="py-8 text-center"><Loader2 className="w-5 h-5 animate-spin text-[#333] mx-auto" /></div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">Bot Token <span className="normal-case text-[#333]">xoxb-...</span></label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#444]" />
+                      <input type="password" value={slackForm.botToken} onChange={(e) => setSlackForm(f => ({ ...f, botToken: e.target.value }))}
+                        placeholder={slackStatus.botTokenSet ? '••••••••••••••••' : 'xoxb-...'} className={`${inp} pl-9`} />
+                    </div>
+                    {slackStatus.botTokenSet && <p className="mt-1 text-[10px] text-[#00c950] flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Token set</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">App Token <span className="normal-case text-[#333]">xapp-...</span></label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#444]" />
+                      <input type="password" value={slackForm.appToken} onChange={(e) => setSlackForm(f => ({ ...f, appToken: e.target.value }))}
+                        placeholder={slackStatus.appTokenSet ? '••••••••••••••••' : 'xapp-...'} className={`${inp} pl-9`} />
+                    </div>
+                    {slackStatus.appTokenSet && <p className="mt-1 text-[10px] text-[#00c950] flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Token set</p>}
+                    <p className="mt-1 text-[10px] text-[#333]">Needs <code className="bg-[#111] px-1 rounded font-mono">connections:write</code> scope</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-[#555] uppercase tracking-wider mb-1.5">Channel ID</label>
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#444]" />
+                    <input type="text" value={slackForm.channelId} onChange={(e) => setSlackForm(f => ({ ...f, channelId: e.target.value }))}
+                      placeholder="C0123456789" className={`${inp} pl-9 font-mono`} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-[#555] uppercase tracking-wider mb-2">Handoff Ping</label>
+                  <div className="flex gap-2">
+                    {(['none', 'here', 'channel'] as const).map((opt) => (
+                      <button key={opt} onClick={() => setSlackStatus(s => ({ ...s, slackPingType: opt }))}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${slackStatus.slackPingType === opt ? 'bg-white text-black border-white' : 'bg-[#111] text-[#555] border-[#222] hover:border-[#333] hover:text-[#888]'}`}>
+                        {opt === 'none' ? 'No ping' : opt === 'here' ? '@here' : '@everyone'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-[#1a1a1a] bg-black p-3">
+                  <p className="text-[10px] text-[#555] uppercase tracking-wider mb-2">Required bot scopes</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['chat:write', 'channels:history', 'groups:history'].map(scope => (
+                      <code key={scope} className="bg-[#111] border border-[#222] px-2 py-0.5 rounded text-[10px] font-mono text-[#888]">{scope}</code>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-2">
+                    <button onClick={handleTestSlack} className={btnSecondary}>Test Connection</button>
+                    {slackTestResult && (
+                      <span className={`text-[10px] font-mono px-2 py-1 rounded ${slackTestResult.ok ? 'bg-[#00c950]/10 text-[#00c950]' : 'bg-[#ff4444]/10 text-[#ff4444]'}`}>
+                        {slackTestResult.ok ? `${slackTestResult.team} / @${slackTestResult.botName}` : slackTestResult.error}
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={handleSaveSlack} disabled={isSavingSlack} className={btnPrimary}>
+                    {isSavingSlack ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    {isSavingSlack ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer */}
-        <footer className="mt-24 pt-8 border-t border-gray-200 text-center">
-          <p className="text-sm text-gray-400">
-            Built with ❤️ by{' '}
-            <a 
-              href="https://anmolsingh.dev" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="font-medium text-black hover:underline"
-            >
-              Anmol
-            </a>{' '}
-            x{' '}
-            <a 
-              href="https://photon.codes" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="font-medium text-black hover:underline"
-            >
-              Photon
-            </a>{' '}
-            |{' '} View on {' '}
-            <a
-              href="https://github.com/photon-hq/centric"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-black hover:underline"
-            >
-              GitHub
-            </a>
+        <footer className="mt-16 pt-8 border-t border-[#111] flex items-center justify-between">
+          <p className="text-xs text-[#333]">
+            Built by{' '}
+            <a href="https://anmolsingh.dev" target="_blank" rel="noopener noreferrer" className="text-[#555] hover:text-white transition-colors">Anmol</a>
+            {' '}x{' '}
+            <a href="https://photon.codes" target="_blank" rel="noopener noreferrer" className="text-[#555] hover:text-white transition-colors">Photon</a>
           </p>
+          <a href="https://github.com/photon-hq/centric" target="_blank" rel="noopener noreferrer" className="text-xs text-[#333] hover:text-white transition-colors">GitHub</a>
         </footer>
       </div>
 
       {/* Document Viewer Modal */}
       {(viewingDocument || isLoadingDocument) && (
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setViewingDocument(null)}
-        >
-          <div 
-            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-gray-400" />
-                <h2 className="text-lg font-semibold text-gray-900">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewingDocument(null)}>
+          <div className="bg-[#0a0a0a] border border-[#222] rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a1a1a]">
+              <div className="flex items-center gap-2.5">
+                <FileText className="w-4 h-4 text-[#555]" />
+                <h2 className="text-sm font-medium text-white font-mono">
                   {viewingDocument?.filename.replace(/^uploaded_/, '').replace(/^scraped_/, '') || 'Loading...'}
                 </h2>
               </div>
               <div className="flex items-center gap-2">
                 {!isEditingDocument && viewingDocument && (
-                  <button
-                    onClick={() => setIsEditingDocument(true)}
-                    className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all flex items-center gap-1"
-                    title="Edit document"
-                  >
-                    <FileEdit className="w-4 h-4" />
-                    Edit
+                  <button onClick={() => setIsEditingDocument(true)} className={btnSecondary}>
+                    <FileEdit className="w-3.5 h-3.5" /> Edit
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    setViewingDocument(null)
-                    setIsEditingDocument(false)
-                  }}
-                  className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-                >
-                  <X className="w-5 h-5" />
+                <button onClick={() => { setViewingDocument(null); setIsEditingDocument(false) }} className="w-7 h-7 flex items-center justify-center rounded text-[#555] hover:text-white hover:bg-[#111] transition-colors">
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-5">
               {isLoadingDocument ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 animate-spin text-gray-300" />
-                </div>
+                <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-[#333]" /></div>
               ) : isEditingDocument && viewingDocument ? (
-                <textarea
-                  value={editedDocumentContent}
-                  onChange={(e) => setEditedDocumentContent(e.target.value)}
-                  className="w-full h-full p-4 font-mono text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black resize-none"
-                  placeholder="Edit document content..."
-                />
+                <textarea value={editedDocumentContent} onChange={(e) => setEditedDocumentContent(e.target.value)}
+                  className="w-full h-full min-h-[400px] p-4 font-mono text-xs bg-black border border-[#222] rounded-lg text-[#ededed] focus:outline-none focus:border-[#444] resize-none" />
               ) : viewingDocument ? (
-                <div className="prose prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap font-mono text-xs bg-gray-50 p-6 rounded-lg border border-gray-200 leading-relaxed text-gray-800">
-                    {viewingDocument.content}
-                  </pre>
-                </div>
+                <pre className="whitespace-pre-wrap font-mono text-xs bg-black p-4 rounded-lg border border-[#1a1a1a] leading-relaxed text-[#888]">
+                  {viewingDocument.content}
+                </pre>
               ) : null}
             </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-gray-100 flex justify-end gap-2">
-              {isEditingDocument && (
+            <div className="px-5 py-3.5 border-t border-[#1a1a1a] flex justify-end gap-2">
+              {isEditingDocument ? (
                 <>
-                  <button
-                    onClick={() => {
-                      setIsEditingDocument(false)
-                      setEditedDocumentContent(viewingDocument?.content || '')
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveDocumentEdit}
-                    disabled={isSavingDocument}
-                    className="px-4 py-2 text-sm font-medium bg-black text-white hover:bg-gray-800 disabled:opacity-50 rounded-lg transition-all flex items-center gap-2"
-                  >
-                    {isSavingDocument ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  <button onClick={() => { setIsEditingDocument(false); setEditedDocumentContent(viewingDocument?.content || '') }} className={btnGhost}>Cancel</button>
+                  <button onClick={handleSaveDocumentEdit} disabled={isSavingDocument} className={btnPrimary}>
+                    {isSavingDocument ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                     {isSavingDocument ? 'Saving...' : 'Save Changes'}
                   </button>
                 </>
-              )}
-              {!isEditingDocument && (
-                <button
-                  onClick={() => setViewingDocument(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
-                >
-                  Close
-                </button>
+              ) : (
+                <button onClick={() => setViewingDocument(null)} className={btnSecondary}>Close</button>
               )}
             </div>
           </div>
