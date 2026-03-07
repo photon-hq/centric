@@ -126,6 +126,13 @@ function detectHumanHandoff(message: string, keywords: string[]): boolean {
   return keywords.some((phrase) => message.toLowerCase().includes(phrase.toLowerCase()))
 }
 
+function detectRestartIntent(message: string): boolean {
+  const lower = message.toLowerCase().trim()
+  return ['new', 'fresh', 'start over', 'restart', 'different', 'reset', 'no'].some((k) =>
+    lower.includes(k)
+  )
+}
+
 function detectProductInquiry(message: string, products: Product[]): Product | null {
   const msg = message.toLowerCase()
 
@@ -603,6 +610,45 @@ async function main() {
 
     const conversation = getConversation(sender)
 
+    // Inactivity detection: if the user returns after a long gap, ask to continue or restart
+    const inactivityMs = (config.features?.session?.inactivityHours ?? 24) * 3600_000
+    const sessionTtlMs = (config.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+    const timeSinceLast = conversation.lastMessageTime
+      ? Date.now() - conversation.lastMessageTime.getTime()
+      : 0
+    const hasHistory = conversation.messageHistory.length > 0
+
+    // Update last message time now (after we've read the previous value)
+    conversation.lastMessageTime = new Date()
+
+    if (conversation.awaitingResumeDecision) {
+      // User is answering the "continue or restart?" question
+      if (detectRestartIntent(combinedText)) {
+        conversations.set(sender, { messageHistory: [], firstMessageShown: false, humanHandoffRequested: false, humanHandoffActive: false, handoffCount: 0, lastMessageTime: new Date() })
+        queue.isProcessing = false
+        await sdk.send(sender, "Starting fresh! How can I help you today?")
+        return
+      } else {
+        conversation.awaitingResumeDecision = false
+        queue.isProcessing = false
+        await sdk.send(sender, "Continuing your last conversation! What can I help you with?")
+        return
+      }
+    }
+
+    if (hasHistory && timeSinceLast > inactivityMs && timeSinceLast < sessionTtlMs) {
+      // Ask user if they want to continue or restart after a long gap
+      conversation.awaitingResumeDecision = true
+      queue.isProcessing = false
+      await sdk.send(sender, "Welcome back! It's been a while since we last spoke. Would you like to continue our previous conversation, or start a new one? (Reply 'continue' or 'new')")
+      return
+    }
+
+    // If session is fully expired (beyond TTL), silently start fresh
+    if (hasHistory && timeSinceLast >= sessionTtlMs) {
+      conversations.set(sender, { messageHistory: [], firstMessageShown: false, humanHandoffRequested: false, humanHandoffActive: false, handoffCount: 0, lastMessageTime: new Date() })
+    }
+
     // If human handoff is active, relay to Slack instead of processing with AI
     if (conversation.humanHandoffActive) {
       try {
@@ -674,6 +720,21 @@ async function main() {
   })
 
   logger.info('Agent is now watching for messages...')
+
+  // Periodic cleanup: remove sessions idle beyond sessionTtlDays to prevent unbounded memory growth
+  setInterval(() => {
+    const ttlMs = (config.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+    const cutoff = Date.now() - ttlMs
+    let removed = 0
+    for (const [phone, conv] of conversations) {
+      if ((conv.lastMessageTime?.getTime() ?? 0) < cutoff) {
+        conversations.delete(phone)
+        senderQueues.delete(phone)
+        removed++
+      }
+    }
+    if (removed > 0) logger.info({ removed }, 'Cleaned up idle sessions')
+  }, 60 * 60 * 1000) // run hourly
 }
 
 // Start the agent

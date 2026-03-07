@@ -94,12 +94,18 @@ export interface TimeConstraints {
   responseTimeMinutes: number
 }
 
+export interface SessionConfig {
+  inactivityHours: number  // hours of silence before asking "continue or restart?"
+  sessionTtlDays: number   // days before an idle session is purged from memory
+}
+
 export interface FeatureFlags {
   negotiation: NegotiationFeature
   mcp: MCPFeature
   sops: SOPFeature
   knowledgeBase: KnowledgeBaseFeature
   timeConstraints: TimeConstraints
+  session?: SessionConfig
 }
 
 // ============================================================================
@@ -218,6 +224,7 @@ export interface ConversationState {
   ticketId?: string
   senderPhone?: string
   lastHumanReplyAt?: number // timestamp (ms) of last human agent reply via Slack
+  awaitingResumeDecision?: boolean // true = bot asked "continue or restart?" and is waiting for user's answer
 }
 
 // ============================================================================

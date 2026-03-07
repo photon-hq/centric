@@ -103,12 +103,18 @@ export const TimeConstraintsSchema = z.object({
   responseTimeMinutes: z.number().positive()
 })
 
+export const SessionConfigSchema = z.object({
+  inactivityHours: z.number().positive(),
+  sessionTtlDays: z.number().positive()
+})
+
 export const FeatureFlagsSchema = z.object({
   negotiation: NegotiationFeatureSchema,
   mcp: MCPFeatureSchema,
   sops: SOPFeatureSchema,
   knowledgeBase: KnowledgeBaseFeatureSchema,
-  timeConstraints: TimeConstraintsSchema
+  timeConstraints: TimeConstraintsSchema,
+  session: SessionConfigSchema.optional()
 })
 
 // ============================================================================

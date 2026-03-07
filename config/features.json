@@ -22,5 +22,9 @@
   "timeConstraints": {
     "offerValidityHours": 24,
     "responseTimeMinutes": 60
+  },
+  "session": {
+    "inactivityHours": 24,
+    "sessionTtlDays": 7
   }
 }

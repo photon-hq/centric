@@ -217,6 +217,19 @@ async function waitForInitialization(timeoutMs: number = 6000): Promise<void> {
 
 const conversations = new Map<string, ConversationState>()
 
+// Periodic cleanup: remove sessions idle beyond sessionTtlDays to prevent unbounded memory growth
+setInterval(() => {
+  const ttlMs = (config?.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+  const cutoff = Date.now() - ttlMs
+  for (const [id, conv] of conversations) {
+    if ((conv.lastMessageTime?.getTime() ?? 0) < cutoff) {
+      conversations.delete(id)
+      humanMsgQueues.delete(id)
+      resolvedSessions.delete(id)
+    }
+  }
+}, 60 * 60 * 1000) // run hourly
+
 function newTicketState(): ConversationState {
   return {
     messageHistory: [],
@@ -256,6 +269,13 @@ function detectHumanHandoff(message: string): boolean {
     'human help', 'human support'
   ]
   return phrases.some(phrase => message.toLowerCase().includes(phrase.toLowerCase()))
+}
+
+function detectRestartIntent(message: string): boolean {
+  const lower = message.toLowerCase().trim()
+  return ['new', 'fresh', 'start over', 'restart', 'different', 'reset', 'no'].some((k) =>
+    lower.includes(k)
+  )
 }
 
 async function generateHandoffSummary(conversation: ConversationState): Promise<string> {
@@ -451,6 +471,43 @@ async function generateResponse(
 
   // If the previous ticket was closed, open a fresh one
   if (conversation.ticketClosed) {
+    const fresh = newTicketState()
+    conversations.set(sessionId, fresh)
+    conversation = fresh
+  }
+
+  // Inactivity detection: if the user returns after a long gap, ask to continue or restart
+  const inactivityMs = (config?.features?.session?.inactivityHours ?? 24) * 3600_000
+  const sessionTtlMs = (config?.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+  const timeSinceLast = conversation.lastMessageTime
+    ? Date.now() - conversation.lastMessageTime.getTime()
+    : 0
+  const hasHistory = conversation.messageHistory.length > 0
+
+  // Update last message time now (after reading the previous value)
+  conversation.lastMessageTime = new Date()
+
+  if (conversation.awaitingResumeDecision) {
+    if (detectRestartIntent(userMessage)) {
+      const fresh = newTicketState()
+      conversations.set(sessionId, fresh)
+      const msg = sanitizeEmDashes("Starting fresh! How can I help you today?")
+      return { message: msg, toolCalls: [] }
+    } else {
+      conversation.awaitingResumeDecision = false
+      const msg = sanitizeEmDashes("Continuing your last conversation! What can I help you with?")
+      return { message: msg, toolCalls: [] }
+    }
+  }
+
+  if (hasHistory && timeSinceLast > inactivityMs && timeSinceLast < sessionTtlMs) {
+    conversation.awaitingResumeDecision = true
+    const msg = sanitizeEmDashes("Welcome back! It's been a while since we last spoke. Would you like to continue our previous conversation, or start a new one? (Reply 'continue' or 'new')")
+    return { message: msg, toolCalls: [] }
+  }
+
+  // If session is fully expired (beyond TTL), silently start fresh
+  if (hasHistory && timeSinceLast >= sessionTtlMs) {
     const fresh = newTicketState()
     conversations.set(sessionId, fresh)
     conversation = fresh
