@@ -167,14 +167,15 @@ export default function ChatInterface() {
 
       const data = await response.json()
 
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: data.response,
-        timestamp: new Date(),
-        toolCalls: data.toolCalls ?? []
+      if (data.response) {
+        const assistantMessage: Message = {
+          role: 'assistant',
+          content: data.response,
+          timestamp: new Date(),
+          toolCalls: data.toolCalls ?? []
+        }
+        setMessages(prev => [...prev, assistantMessage])
       }
-
-      setMessages(prev => [...prev, assistantMessage])
 
       if (data.handoffActive) setIsHandoffActive(true)
     } catch (error) {

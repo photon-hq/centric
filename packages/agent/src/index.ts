@@ -548,6 +548,7 @@ async function main() {
       onMessageForCustomer: async (sender, text) => {
         try {
           await sdk.send(sender, text)
+          getConversation(sender).lastHumanReplyAt = Date.now()
           logger.info({ sender }, 'Forwarded Slack reply to customer')
         } catch (error) {
           logger.error({ error, sender }, 'Failed to forward Slack reply to customer')
@@ -609,7 +610,11 @@ async function main() {
           await slackNotifier.postCustomerMessage(conversation.slackThreadTs, combinedText)
           logger.info({ sender }, 'Relayed customer message to Slack thread')
         }
-        await sdk.send(sender, "Your message has been sent to our support team. They'll reply here shortly.")
+        // Only send hold message if the human agent hasn't replied recently (within 10 min)
+        const recentReply = conversation.lastHumanReplyAt && (Date.now() - conversation.lastHumanReplyAt) < 10 * 60 * 1000
+        if (!recentReply) {
+          await sdk.send(sender, "Your message has been sent to our support team. They'll reply here shortly.")
+        }
       } catch (error) {
         logger.error({ error, sender }, 'Failed to relay message to Slack')
       } finally {

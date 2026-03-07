@@ -217,6 +217,7 @@ export interface ConversationState {
   ticketClosed?: boolean
   ticketId?: string
   senderPhone?: string
+  lastHumanReplyAt?: number // timestamp (ms) of last human agent reply via Slack
 }
 
 // ============================================================================

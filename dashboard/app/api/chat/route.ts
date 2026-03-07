@@ -154,6 +154,8 @@ async function initialize() {
           const q = humanMsgQueues.get(sessionId) ?? []
           q.push(text)
           humanMsgQueues.set(sessionId, q)
+          const conv = conversations.get(sessionId)
+          if (conv) conv.lastHumanReplyAt = Date.now()
         },
         onResolve: (sessionId) => {
           const conv = conversations.get(sessionId)
@@ -487,6 +489,11 @@ async function generateResponse(
   if (conversation.humanHandoffActive) {
     if (slackNotifier && conversation.slackThreadTs) {
       await slackNotifier.postCustomerMessage(conversation.slackThreadTs, userMessage)
+    }
+    // Only send hold message if the human agent hasn't replied recently (within 10 min)
+    const recentReply = conversation.lastHumanReplyAt && (Date.now() - conversation.lastHumanReplyAt) < 10 * 60 * 1000
+    if (recentReply) {
+      return { message: '', toolCalls: noTools }
     }
     const holdMsg = sanitizeEmDashes("Your message has been sent to our support team. They'll reply here shortly.")
     conversation.messageHistory.push({ role: 'assistant', content: holdMsg })

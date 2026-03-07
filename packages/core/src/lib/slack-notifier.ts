@@ -37,13 +37,14 @@ export class SlackNotifier {
     this.app.event('message', async ({ event }) => {
       const msg = event as any
 
-      // Only handle thread replies in our channel, ignore bots and all non-plain messages
-      if (!msg.thread_ts) return
-      if (msg.bot_id || msg.subtype) return
-      if (msg.channel !== this.channelId) return
+      console.log('[SlackNotifier] message event:', { subtype: msg.subtype, thread_ts: msg.thread_ts, channel: msg.channel, bot_id: msg.bot_id, text: msg.text?.slice(0, 50) })
+
+      if (!msg.thread_ts) { console.log('[SlackNotifier] skip: no thread_ts'); return }
+      if (msg.bot_id || msg.subtype) { console.log('[SlackNotifier] skip: bot_id or subtype', msg.bot_id, msg.subtype); return }
+      if (msg.channel !== this.channelId) { console.log('[SlackNotifier] skip: channel mismatch', msg.channel, 'vs', this.channelId); return }
 
       const sender = this.threadMap.get(msg.thread_ts)
-      if (!sender) return
+      if (!sender) { console.log('[SlackNotifier] skip: no threadMap entry for', msg.thread_ts, ',  known threads:', [...this.threadMap.keys()]); return }
 
       const text: string = msg.text || ''
 
@@ -54,6 +55,7 @@ export class SlackNotifier {
         return
       }
 
+      console.log('[SlackNotifier] routing to customer', sender)
       this.callbacks.onMessageForCustomer(sender, text)
     })
 

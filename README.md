@@ -320,24 +320,36 @@ When a customer says a handoff keyword (configurable in `company.json`), the age
 1. Posts a summary of the conversation to the configured Slack channel
 2. Pauses AI responses ,  subsequent customer messages relay to the Slack thread
 3. Human agents reply in the Slack thread to respond to the customer
-4. When the human types `/resolve` in the Slack thread, AI re-enables for that customer
+4. When the human types `CLOSETICKET` in the Slack thread, AI re-enables for that customer
 
 **Setup:**
 
 1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps)
+
 2. In the left sidebar → **Socket Mode** → enable it
+
 3. In the left sidebar → **Basic Information** → scroll to **App-Level Tokens** → click **Generate Token and Scopes**, add scope `connections:write`, copy the token (`xapp-...`) ,  this is your `SLACK_APP_TOKEN`
-4. In the left sidebar → **OAuth & Permissions** → scroll to **Bot Token Scopes** → add: `chat:write`, `channels:history`, `channels:join`
+
+4. In the left sidebar → **OAuth & Permissions** → scroll to **Bot Token Scopes** → add:
+   - `chat:write` ,  post messages
+   - `channels:history` ,  read messages from public channels (use `groups:history` for private channels)
+   - `channels:join` ,  auto-join public channels
+
 5. Click **Install to Workspace** at the top of the OAuth & Permissions page, then copy the **Bot User OAuth Token** (`xoxb-...`) ,  this is your `SLACK_BOT_TOKEN`
-6. Add environment variables:
+
+6. In the left sidebar → **Event Subscriptions** → toggle **Enable Events** on → scroll to **Subscribe to bot events** → click **Add Bot User Event** → add `message.channels` (public channel) or `message.groups` (private channel) → **Save Changes** → when prompted, click **Reinstall your app**
+
+7. Invite the bot to your support channel in Slack: `/invite @YourBotName`
+
+8. Add environment variables:
 
 ```env
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_APP_TOKEN=xapp-...
-SLACK_CHANNEL_ID=C0XXXXXXXXX
+SLACK_CHANNEL_ID=C0XXXXXXXXX   # channel ID, not name ,  right-click channel → View channel details → copy ID
 ```
 
-7. In `config/company.json`, set `humanHandoff.slackEnabled: true` and `humanHandoff.slackChannelId`
+9. In `config/company.json`, set `humanHandoff.slackEnabled: true` and `humanHandoff.slackChannelId`
 
 ---
 
@@ -527,7 +539,7 @@ packages/agent/src/index.ts
        ├─── Human handoff check → SlackNotifier (if keywords detected)
        │         └── relay customer messages to Slack thread
        │         └── relay human Slack replies back to iMessage
-       │         └── /resolve command re-enables AI
+       │         └── CLOSETICKET keyword re-enables AI
        │
        ├─── Product detection + price negotiation (local, no LLM needed)
        │
