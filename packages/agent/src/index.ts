@@ -344,7 +344,7 @@ async function generateResponse(sender: string, message: string, vectorStore: Do
         if (slackNotifier) {
           try {
             const summary = await generateHandoffSummary(conversation)
-            const threadTs = await slackNotifier.postHandoff(sender, conversation, summary)
+            const threadTs = await slackNotifier.postHandoff(sender, conversation, summary, config.company.humanHandoff?.slackPingType ?? 'none')
             if (threadTs) {
               conversation.slackThreadTs = threadTs
               logger.info({ sender, threadTs }, 'Human handoff posted to Slack')
@@ -562,11 +562,17 @@ async function main() {
         }
       },
       onResolve: async (sender) => {
-        const conversation = getConversation(sender)
-        conversation.humanHandoffActive = false
-        conversation.slackThreadTs = undefined
-        conversation.currentNegotiation = undefined
-        logger.info({ sender }, 'Human handoff resolved, AI re-enabled')
+        const prev = getConversation(sender)
+        conversations.set(sender, {
+          messageHistory: [],
+          firstMessageShown: true,
+          humanHandoffRequested: false,
+          humanHandoffActive: false,
+          handoffCount: prev.handoffCount,
+          senderPhone: prev.senderPhone,
+          lastMessageTime: new Date()
+        })
+        logger.info({ sender }, 'Human handoff resolved, conversation reset, AI re-enabled')
         try {
           await sdk.send(sender, "You're back with the AI assistant. How can I help?")
         } catch (error) {
@@ -610,44 +616,11 @@ async function main() {
 
     const conversation = getConversation(sender)
 
-    // Inactivity detection: if the user returns after a long gap, ask to continue or restart
-    const inactivityMs = (config.features?.session?.inactivityHours ?? 24) * 3600_000
-    const sessionTtlMs = (config.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+    // Update last message time (read old value first for inactivity check below)
     const timeSinceLast = conversation.lastMessageTime
       ? Date.now() - conversation.lastMessageTime.getTime()
       : 0
-    const hasHistory = conversation.messageHistory.length > 0
-
-    // Update last message time now (after we've read the previous value)
     conversation.lastMessageTime = new Date()
-
-    if (conversation.awaitingResumeDecision) {
-      // User is answering the "continue or restart?" question
-      if (detectRestartIntent(combinedText)) {
-        conversations.set(sender, { messageHistory: [], firstMessageShown: false, humanHandoffRequested: false, humanHandoffActive: false, handoffCount: 0, lastMessageTime: new Date() })
-        queue.isProcessing = false
-        await sdk.send(sender, "Starting fresh! How can I help you today?")
-        return
-      } else {
-        conversation.awaitingResumeDecision = false
-        queue.isProcessing = false
-        await sdk.send(sender, "Continuing your last conversation! What can I help you with?")
-        return
-      }
-    }
-
-    if (hasHistory && timeSinceLast > inactivityMs && timeSinceLast < sessionTtlMs) {
-      // Ask user if they want to continue or restart after a long gap
-      conversation.awaitingResumeDecision = true
-      queue.isProcessing = false
-      await sdk.send(sender, "Welcome back! It's been a while since we last spoke. Would you like to continue our previous conversation, or start a new one? (Reply 'continue' or 'new')")
-      return
-    }
-
-    // If session is fully expired (beyond TTL), silently start fresh
-    if (hasHistory && timeSinceLast >= sessionTtlMs) {
-      conversations.set(sender, { messageHistory: [], firstMessageShown: false, humanHandoffRequested: false, humanHandoffActive: false, handoffCount: 0, lastMessageTime: new Date() })
-    }
 
     // If human handoff is active, relay to Slack instead of processing with AI
     if (conversation.humanHandoffActive) {
@@ -670,6 +643,36 @@ async function main() {
         }
       }
       return
+    }
+
+    // Inactivity detection ,  only runs when NOT in a human handoff
+    const inactivityMs = (config.features?.session?.inactivityHours ?? 24) * 3600_000
+    const sessionTtlMs = (config.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+    const hasHistory = conversation.messageHistory.length > 0
+
+    if (conversation.awaitingResumeDecision) {
+      if (detectRestartIntent(combinedText)) {
+        conversations.set(sender, { messageHistory: [], firstMessageShown: false, humanHandoffRequested: false, humanHandoffActive: false, handoffCount: 0, lastMessageTime: new Date() })
+        queue.isProcessing = false
+        await sdk.send(sender, "Starting fresh! How can I help you today?")
+        return
+      } else {
+        conversation.awaitingResumeDecision = false
+        queue.isProcessing = false
+        await sdk.send(sender, "Continuing your last conversation! What can I help you with?")
+        return
+      }
+    }
+
+    if (hasHistory && timeSinceLast > inactivityMs && timeSinceLast < sessionTtlMs) {
+      conversation.awaitingResumeDecision = true
+      queue.isProcessing = false
+      await sdk.send(sender, "Welcome back! It's been a while since we last spoke. Would you like to continue our previous conversation, or start a new one? (Reply 'continue' or 'new')")
+      return
+    }
+
+    if (hasHistory && timeSinceLast >= sessionTtlMs) {
+      conversations.set(sender, { messageHistory: [], firstMessageShown: false, humanHandoffRequested: false, humanHandoffActive: false, handoffCount: 0, lastMessageTime: new Date() })
     }
 
     const isFirstMessage = conversation.messageHistory.length === 0

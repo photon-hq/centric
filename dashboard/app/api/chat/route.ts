@@ -148,7 +148,7 @@ async function initialize() {
     const appToken = process.env.SLACK_APP_TOKEN
     const channelId = process.env.SLACK_CHANNEL_ID || handoffConfig?.slackChannelId || ''
 
-    if (handoffConfig?.slackEnabled && botToken && appToken && channelId) {
+    if (!slackNotifier && handoffConfig?.slackEnabled && botToken && appToken && channelId) {
       slackNotifier = new SlackNotifier(botToken, appToken, channelId, {
         onMessageForCustomer: (sessionId, text) => {
           const q = humanMsgQueues.get(sessionId) ?? []
@@ -159,11 +159,11 @@ async function initialize() {
         },
         onResolve: (sessionId) => {
           const conv = conversations.get(sessionId)
-          if (conv) {
-            conv.humanHandoffActive = false
-            conv.slackThreadTs = undefined
-            resolvedSessions.add(sessionId)
-          }
+          const fresh = newTicketState()
+          fresh.senderPhone = conv?.senderPhone
+          fresh.handoffCount = conv?.handoffCount ?? 0
+          conversations.set(sessionId, fresh)
+          resolvedSessions.add(sessionId)
         }
       })
       await slackNotifier.start().catch((err) => {
@@ -476,42 +476,11 @@ async function generateResponse(
     conversation = fresh
   }
 
-  // Inactivity detection: if the user returns after a long gap, ask to continue or restart
-  const inactivityMs = (config?.features?.session?.inactivityHours ?? 24) * 3600_000
-  const sessionTtlMs = (config?.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+  // Read old lastMessageTime before updating (needed for inactivity check below)
   const timeSinceLast = conversation.lastMessageTime
     ? Date.now() - conversation.lastMessageTime.getTime()
     : 0
-  const hasHistory = conversation.messageHistory.length > 0
-
-  // Update last message time now (after reading the previous value)
   conversation.lastMessageTime = new Date()
-
-  if (conversation.awaitingResumeDecision) {
-    if (detectRestartIntent(userMessage)) {
-      const fresh = newTicketState()
-      conversations.set(sessionId, fresh)
-      const msg = sanitizeEmDashes("Starting fresh! How can I help you today?")
-      return { message: msg, toolCalls: [] }
-    } else {
-      conversation.awaitingResumeDecision = false
-      const msg = sanitizeEmDashes("Continuing your last conversation! What can I help you with?")
-      return { message: msg, toolCalls: [] }
-    }
-  }
-
-  if (hasHistory && timeSinceLast > inactivityMs && timeSinceLast < sessionTtlMs) {
-    conversation.awaitingResumeDecision = true
-    const msg = sanitizeEmDashes("Welcome back! It's been a while since we last spoke. Would you like to continue our previous conversation, or start a new one? (Reply 'continue' or 'new')")
-    return { message: msg, toolCalls: [] }
-  }
-
-  // If session is fully expired (beyond TTL), silently start fresh
-  if (hasHistory && timeSinceLast >= sessionTtlMs) {
-    const fresh = newTicketState()
-    conversations.set(sessionId, fresh)
-    conversation = fresh
-  }
 
   // Store phone number for Slack handoff display
   if (senderPhone && !conversation.senderPhone) {
@@ -557,6 +526,36 @@ async function generateResponse(
     return { message: holdMsg, toolCalls: noTools }
   }
 
+  // Inactivity detection ,  only runs when NOT in a human handoff
+  const inactivityMs = (config?.features?.session?.inactivityHours ?? 24) * 3600_000
+  const sessionTtlMs = (config?.features?.session?.sessionTtlDays ?? 7) * 86_400_000
+  const hasHistory = conversation.messageHistory.length > 0
+
+  if (conversation.awaitingResumeDecision) {
+    if (detectRestartIntent(userMessage)) {
+      const fresh = newTicketState()
+      conversations.set(sessionId, fresh)
+      const msg = sanitizeEmDashes("Starting fresh! How can I help you today?")
+      return { message: msg, toolCalls: noTools }
+    } else {
+      conversation.awaitingResumeDecision = false
+      const msg = sanitizeEmDashes("Continuing your last conversation! What can I help you with?")
+      return { message: msg, toolCalls: noTools }
+    }
+  }
+
+  if (hasHistory && timeSinceLast > inactivityMs && timeSinceLast < sessionTtlMs) {
+    conversation.awaitingResumeDecision = true
+    const msg = sanitizeEmDashes("Welcome back! It's been a while since we last spoke. Would you like to continue our previous conversation, or start a new one? (Reply 'continue' or 'new')")
+    return { message: msg, toolCalls: noTools }
+  }
+
+  if (hasHistory && timeSinceLast >= sessionTtlMs) {
+    const fresh = newTicketState()
+    conversations.set(sessionId, fresh)
+    conversation = fresh
+  }
+
   // Check for human handoff request
   if (config?.company.humanHandoff?.enabled && detectHumanHandoff(userMessage)) {
     conversation.humanHandoffRequested = true
@@ -569,7 +568,7 @@ async function generateResponse(
     if (slackNotifier) {
       try {
         const summary = await generateHandoffSummary(conversation)
-        const threadTs = await slackNotifier.postHandoff(sessionId, conversation, summary)
+        const threadTs = await slackNotifier.postHandoff(sessionId, conversation, summary, config?.company.humanHandoff?.slackPingType ?? 'none')
         if (threadTs) {
           conversation.slackThreadTs = threadTs
         }

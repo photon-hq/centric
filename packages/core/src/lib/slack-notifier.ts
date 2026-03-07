@@ -69,7 +69,8 @@ export class SlackNotifier {
   async postHandoff(
     sender: string,
     conversation: ConversationState,
-    summary: string
+    summary: string,
+    pingType: 'none' | 'here' | 'channel' = 'none'
   ): Promise<string | null> {
     try {
       const time = new Date().toLocaleString('en-US', {
@@ -84,8 +85,14 @@ export class SlackNotifier {
       const priorEscalations = conversation.handoffCount ?? 0
       const phone = conversation.senderPhone || sender
 
+      const pingPrefix = pingType === 'here'
+        ? '<!here> '
+        : pingType === 'channel'
+          ? '<!channel> '
+          : ''
+
       const alertText = [
-        ':rotating_light: *Human Handoff Request*',
+        `${pingPrefix}:rotating_light: *Human Handoff Request*`,
         '',
         `*Customer Phone:* ${phone}`,
         `*Time:* ${time}`,

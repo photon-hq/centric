@@ -53,6 +53,7 @@ export interface HumanHandoffConfig {
   message: string
   slackEnabled?: boolean
   slackChannelId?: string
+  slackPingType?: 'none' | 'here' | 'channel'
 }
 
 export interface CompanyConfig extends CompanyIdentity {

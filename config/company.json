@@ -29,6 +29,7 @@
     ],
     "message": "I'll connect you with a team member. Please hold on.",
     "slackEnabled": true,
-    "slackChannelId": "C0AK030GAKW"
+    "slackChannelId": "C0AK030GAKW",
+    "slackPingType": "here"
   }
 }

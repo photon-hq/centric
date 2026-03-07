@@ -18,7 +18,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "bun test"
   },
   "dependencies": {
     "@slack/bolt": "^4.0.0",

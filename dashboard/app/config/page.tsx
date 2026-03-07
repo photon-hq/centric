@@ -173,6 +173,7 @@ export default function ConfigPage() {
   const [slackStatus, setSlackStatus] = useState({
     slackEnabled: false,
     slackChannelId: '',
+    slackPingType: 'none' as 'none' | 'here' | 'channel',
     botTokenSet: false,
     appTokenSet: false
   })
@@ -1234,6 +1235,7 @@ export default function ConfigPage() {
         body: JSON.stringify({
           slackEnabled: slackStatus.slackEnabled,
           slackChannelId: slackForm.channelId,
+          slackPingType: slackStatus.slackPingType,
           botToken: slackForm.botToken || undefined,
           appToken: slackForm.appToken || undefined
         })
@@ -2348,6 +2350,34 @@ export default function ConfigPage() {
                         className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
                       />
                     </div>
+                  </div>
+
+                  {/* Handoff Ping */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Handoff Ping
+                      <span className="ml-1.5 text-xs font-normal text-gray-400">(sent with each new handoff alert)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {(['none', 'here', 'channel'] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => setSlackStatus(s => ({ ...s, slackPingType: opt }))}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                            slackStatus.slackPingType === opt
+                              ? 'bg-black text-white border-black'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                          }`}
+                        >
+                          {opt === 'none' ? 'No ping' : opt === 'here' ? '@here' : '@everyone'}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      {slackStatus.slackPingType === 'here' && 'Notifies active members in the channel.'}
+                      {slackStatus.slackPingType === 'channel' && 'Notifies all members in the channel.'}
+                      {slackStatus.slackPingType === 'none' && 'No notification ping ,  message posts silently.'}
+                    </p>
                   </div>
 
                   {/* Required Permissions Note */}

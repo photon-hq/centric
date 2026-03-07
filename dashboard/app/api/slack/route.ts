@@ -41,10 +41,11 @@ export async function GET() {
 
     const slackEnabled = company.humanHandoff?.slackEnabled ?? false
     const slackChannelId = company.humanHandoff?.slackChannelId ?? ''
+    const slackPingType = company.humanHandoff?.slackPingType ?? 'none'
     const botTokenSet = /^SLACK_BOT_TOKEN=.+/m.test(envContent)
     const appTokenSet = /^SLACK_APP_TOKEN=.+/m.test(envContent)
 
-    return NextResponse.json({ slackEnabled, slackChannelId, botTokenSet, appTokenSet })
+    return NextResponse.json({ slackEnabled, slackChannelId, slackPingType, botTokenSet, appTokenSet })
   } catch (error) {
     console.error('Error loading Slack config:', error)
     return NextResponse.json(
@@ -58,7 +59,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { action, slackEnabled, slackChannelId, botToken, appToken } = body
+    const { action, slackEnabled, slackChannelId, slackPingType, botToken, appToken } = body
 
     // Test Slack bot token
     if (action === 'test') {
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
     }
     if (typeof slackEnabled === 'boolean') company.humanHandoff.slackEnabled = slackEnabled
     if (typeof slackChannelId === 'string') company.humanHandoff.slackChannelId = slackChannelId
+    if (slackPingType === 'none' || slackPingType === 'here' || slackPingType === 'channel') company.humanHandoff.slackPingType = slackPingType
     await writeCompanyJson(company)
 
     // Update .env.local for tokens if provided

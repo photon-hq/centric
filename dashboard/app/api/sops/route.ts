@@ -38,12 +38,14 @@ async function loadSOPs(): Promise<SOP[]> {
   if (fsSync.existsSync(SOPS_FILE)) {
     try {
       const data = await fs.readFile(SOPS_FILE, 'utf-8')
-      const currentSOPs = JSON.parse(data) as SOP[]
+      const parsed = JSON.parse(data)
+      const currentSOPs = (Array.isArray(parsed) ? parsed : (parsed?.sops ?? [])) as SOP[]
 
       if (fsSync.existsSync(DEFAULT_SOPS_FILE)) {
         try {
           const defaultData = await fs.readFile(DEFAULT_SOPS_FILE, 'utf-8')
-          const defaultSOPs = JSON.parse(defaultData) as SOP[]
+          const defaultParsed = JSON.parse(defaultData)
+          const defaultSOPs = (Array.isArray(defaultParsed) ? defaultParsed : (defaultParsed?.sops ?? [])) as SOP[]
           const mergedSOPs = ensureGreetingSOP(currentSOPs, defaultSOPs)
 
           if (mergedSOPs.length !== currentSOPs.length) {
@@ -66,7 +68,8 @@ async function loadSOPs(): Promise<SOP[]> {
   if (fsSync.existsSync(DEFAULT_SOPS_FILE)) {
     try {
       const data = await fs.readFile(DEFAULT_SOPS_FILE, 'utf-8')
-      const defaultSOPs = JSON.parse(data)
+      const parsed = JSON.parse(data)
+      const defaultSOPs = (Array.isArray(parsed) ? parsed : (parsed?.sops ?? [])) as SOP[]
       // Save defaults as current SOPs
       await fs.writeFile(SOPS_FILE, JSON.stringify(defaultSOPs, null, 2))
       return defaultSOPs
@@ -92,7 +95,8 @@ export async function GET() {
     if (fsSync.existsSync(DEFAULT_SOPS_FILE)) {
       try {
         const defaultData = await fs.readFile(DEFAULT_SOPS_FILE, 'utf-8')
-        const defaultSOPs = JSON.parse(defaultData) as SOP[]
+        const defaultParsed = JSON.parse(defaultData)
+        const defaultSOPs = (Array.isArray(defaultParsed) ? defaultParsed : (defaultParsed?.sops ?? [])) as SOP[]
         defaultSOPs.forEach(d => defaultIds.add(d.id))
       } catch (e) {
         // ignore default load errors
