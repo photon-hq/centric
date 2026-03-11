@@ -22,19 +22,19 @@
     "clearing": "Use 'Clear All Scraped Documents' button to remove scraped content",
     "manual_docs": "Manual documents (without 'scraped_' prefix) are preserved when clearing"
   },
-  "websiteUrl": "",
+  "websiteUrl": "https://github.com/photon-hq",
   "includeSameOriginSubdomains": true,
   "maxDepth": 3,
   "autoUpdateEnabled": false,
   "autoUpdateIntervalMinutes": 72,
-  "lastScraped": "2026-03-06T02:40:05.030Z",
-  "totalPages": 62,
+  "lastScraped": "2026-03-11T21:08:43.495Z",
+  "totalPages": 74,
   "lastScrapeStats": {
-    "processedPages": 62,
-    "newPages": 62,
+    "processedPages": 74,
+    "newPages": 74,
     "updatedPages": 0,
     "unchangedPages": 0,
-    "discoveredUrls": 62,
+    "discoveredUrls": 74,
     "stalePagesRemoved": 0
   }
 }

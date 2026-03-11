@@ -3,7 +3,12 @@ import { normalizeWebsiteUrl, runScrape, type ScrapeConfig } from '../../../lib/
 
 export async function POST(request: NextRequest) {
   try {
-    const config: ScrapeConfig = await request.json()
+    const body = await request.json()
+    const config: ScrapeConfig = {
+      websiteUrl: body.websiteUrl ?? body.url,
+      includeSameOriginSubdomains: body.includeSameOriginSubdomains,
+      maxDepth: body.maxDepth
+    }
 
     if (!config.websiteUrl) {
       return new Response(

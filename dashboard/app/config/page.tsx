@@ -231,8 +231,17 @@ export default function ConfigPage() {
     try {
       const res = await fetch('/api/scrape', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: normalizedUrl, includeSameOriginSubdomains: config.includeSameOriginSubdomains, maxDepth: config.maxDepth })
+        body: JSON.stringify({ websiteUrl: normalizedUrl, includeSameOriginSubdomains: config.includeSameOriginSubdomains, maxDepth: config.maxDepth })
       })
+      if (!res.ok) {
+        let errorMessage = `Scrape failed (${res.status})`
+        try {
+          const err = await res.json()
+          if (err?.error) errorMessage = err.error
+          if (err?.details) errorMessage = `${errorMessage}: ${err.details}`
+        } catch {}
+        throw new Error(errorMessage)
+      }
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
       if (reader) {
