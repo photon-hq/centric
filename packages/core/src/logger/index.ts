@@ -4,6 +4,7 @@
  */
 
 import pino, { type Logger as PinoLogger } from 'pino'
+import pinoPretty from 'pino-pretty'
 
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 
@@ -23,23 +24,31 @@ export function createLogger(options: LoggerOptions = {}): PinoLogger {
     name = 'photon-agent'
   } = options
 
-  return pino({
+  const baseOptions = {
     name,
     level,
-    transport: pretty
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'SYS:standard',
-            ignore: 'pid,hostname'
-          }
-        }
-      : undefined,
     formatters: {
       level: (label: string) => ({ level: label })
     }
-  })
+  }
+
+  if (!pretty) {
+    return pino(baseOptions)
+  }
+
+  try {
+    // Use in-process pretty printing to avoid pino's worker transport crashes
+    // in bundled runtimes like Next.js route handlers.
+    const prettyStream = pinoPretty({
+      colorize: true,
+      translateTime: 'SYS:standard',
+      ignore: 'pid,hostname'
+    })
+    return pino(baseOptions, prettyStream)
+  } catch (error) {
+    console.warn('[photon-agent] Failed to enable pretty logging, using plain JSON logs:', error)
+    return pino(baseOptions)
+  }
 }
 
 // Default logger instance
