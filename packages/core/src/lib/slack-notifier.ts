@@ -94,7 +94,7 @@ export class SlackNotifier {
       const alertText = [
         `${pingPrefix}:rotating_light: *Human Handoff Request*`,
         '',
-        `*Customer Phone:* REDACTED`,
+        `*Customer Phone:* ${phone}`,
         `*Time:* ${time}`,
         `*Prior escalations this session:* ${priorEscalations}`,
         '',
