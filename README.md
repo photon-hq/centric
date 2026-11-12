@@ -675,4 +675,4 @@ bun test
 
 ## License
 
-MIT ,  see individual package licenses for `@photon-ai/imessage-kit` and `openai`.
+Apache-2.0, see individual package licenses for `@photon-ai/imessage-kit` and `openai`.
